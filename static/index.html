@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IT运维工单系统 - 登录</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        
+        .login-bg {
+            background: linear-gradient(-45deg, #667eea, #764ba2, #f093fb, #4facfe);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+        }
+        
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(20px);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+        
+        .input-focus:focus {
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+            border-color: #667eea;
+        }
+        
+        .btn-gradient {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-gradient:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -5px rgba(102, 126, 234, 0.5);
+        }
+        
+        .icon-float {
+            animation: float 3s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+    </style>
+</head>
+<body class="login-bg min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+    <!-- 装饰性背景元素 -->
+    <div class="absolute top-10 left-10 w-72 h-72 bg-white/10 rounded-full blur-3xl"></div>
+    <div class="absolute bottom-10 right-10 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
+    
+    <div class="glass-effect rounded-3xl p-12 w-full max-w-md border border-white/30 relative z-10">
+        <div class="text-center mb-10">
+            <div class="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-3xl mb-6 shadow-2xl icon-float">
+                <i class="fas fa-tools text-5xl text-white"></i>
+            </div>
+            <h1 class="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-3">
+                IT运维工单系统
+            </h1>
+            <p class="text-gray-600 text-base font-medium">Enterprise Ticket Management System</p>
+        </div>
+
+        <form id="loginForm" class="space-y-6">
+            <div>
+                <label class="block text-sm font-bold text-gray-700 mb-3">
+                    <i class="fas fa-user mr-2 text-indigo-600"></i>用户名
+                </label>
+                <div class="relative group">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <i class="fas fa-user text-gray-400 group-focus-within:text-indigo-600 transition"></i>
+                    </div>
+                    <input 
+                        type="text" 
+                        id="username" 
+                        required
+                        class="w-full pl-12 pr-4 py-4 border-2 border-gray-300 rounded-xl focus:ring-0 focus:border-indigo-500 transition-all input-focus text-gray-800 font-medium"
+                        placeholder="请输入用户名"
+                    >
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-bold text-gray-700 mb-3">
+                    <i class="fas fa-lock mr-2 text-indigo-600"></i>密码
+                </label>
+                <div class="relative group">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <i class="fas fa-lock text-gray-400 group-focus-within:text-indigo-600 transition"></i>
+                    </div>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        required
+                        class="w-full pl-12 pr-4 py-4 border-2 border-gray-300 rounded-xl focus:ring-0 focus:border-indigo-500 transition-all input-focus text-gray-800 font-medium"
+                        placeholder="请输入密码"
+                    >
+                </div>
+            </div>
+
+            <div id="errorMessage" class="hidden bg-red-50 border-2 border-red-200 text-red-700 px-5 py-4 rounded-xl">
+                <div class="flex items-center">
+                    <i class="fas fa-exclamation-circle mr-3 text-xl"></i>
+                    <span id="errorText" class="font-medium"></span>
+                </div>
+            </div>
+
+            <button 
+                type="submit" 
+                class="w-full btn-gradient text-white font-bold py-4 rounded-xl shadow-xl text-lg"
+            >
+                <i class="fas fa-sign-in-alt mr-2"></i>立即登录
+            </button>
+        </form>
+
+        <div class="mt-8 pt-6 border-t border-gray-200">
+            <p class="text-center text-sm text-gray-500">
+                <i class="fas fa-shield-alt mr-2 text-indigo-600"></i>安全登录 · 数据加密
+            </p>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorMessage = document.getElementById('errorMessage');
+            const errorText = document.getElementById('errorText');
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // 使用sessionStorage保存token和用户信息，每个标签页独立
+                    sessionStorage.setItem('token', data.token);
+                    sessionStorage.setItem('user', JSON.stringify(data.user));
+                    
+                    // 跳转到主页
+                    window.location.href = '/static/dashboard.html';
+                } else {
+                    errorMessage.classList.remove('hidden');
+                    errorText.textContent = data.detail || '登录失败';
+                }
+            } catch (error) {
+                errorMessage.classList.remove('hidden');
+                errorText.textContent = '网络错误，请稍后重试';
+            }
+        });
+    </script>
+</body>
+</html>

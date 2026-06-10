@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IT运维工单系统 - 控制台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%);
+        }
+        
+        .stat-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+        }
+        
+        .stat-icon {
+            transition: all 0.3s ease;
+        }
+        
+        .stat-card:hover .stat-icon {
+            transform: rotate(10deg) scale(1.1);
+        }
+        
+        .btn-action {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-action::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        
+        .btn-action:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+        
+        .btn-action:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        .notification-item {
+            transition: all 0.2s ease;
+        }
+        
+        .notification-item:hover {
+            background-color: #f3f4f6;
+            transform: translateX(4px);
+        }
+        
+        .modal-backdrop {
+            backdrop-filter: blur(8px);
+            animation: fadeIn 0.3s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .table-row {
+            transition: all 0.2s ease;
+        }
+        
+        .table-row:hover {
+            background-color: #f9fafb;
+            transform: scale(1.01);
+        }
+        
+        .nav-shadow {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .soft-scrollbar {
+            scrollbar-width: thin;
+            scrollbar-color: #c7d2fe transparent;
+        }
+
+        .soft-scrollbar::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .soft-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .soft-scrollbar::-webkit-scrollbar-thumb {
+            background: #c7d2fe;
+            border-radius: 999px;
+            border: 2px solid transparent;
+            background-clip: content-box;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- 顶部导航栏 -->
+    <nav class="bg-white border-b-2 border-indigo-100 sticky top-0 z-40 nav-shadow">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col gap-4 py-4 sm:flex-row sm:justify-between sm:items-center sm:h-18 sm:py-0">
+                <div class="flex items-center">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-12 h-12 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg transform hover:rotate-6 transition">
+                            <i class="fas fa-tools text-2xl text-white"></i>
+                        </div>
+                        <div>
+                            <h1 class="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">IT运维工单系统</h1>
+                            <p class="text-xs text-gray-500 font-medium">Ticket Management System</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between sm:justify-end space-x-2 sm:space-x-4">
+                    <!-- 通知图标 -->
+                    <div class="relative">
+                        <button id="notificationBtn" class="relative p-3 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all duration-300 hover:scale-110">
+                            <i class="fas fa-bell text-xl"></i>
+                            <span id="notificationBadge" class="hidden absolute top-1.5 right-1.5 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold animate-pulse">0</span>
+                        </button>
+                        <!-- 通知下拉菜单 -->
+                        <div id="notificationDropdown" class="hidden fixed left-4 right-4 top-20 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-3 sm:w-96 bg-white rounded-2xl shadow-2xl z-50 max-h-96 overflow-y-auto border-2 border-gray-100">
+                            <div class="p-5 border-b-2 border-gray-100 bg-gradient-to-r from-indigo-50 to-purple-50 flex justify-between items-center">
+                                <div>
+                                    <h3 class="font-bold text-gray-900 text-lg">通知中心</h3>
+                                    <p class="text-xs text-gray-600 mt-1">您有新的消息提醒</p>
+                                </div>
+                                <button onclick="markAllNotificationsRead()" class="text-xs text-indigo-600 hover:text-indigo-800 font-bold bg-white px-3 py-1.5 rounded-lg shadow-sm hover:shadow border border-indigo-100 transition">
+                                    <i class="fas fa-check-double mr-1"></i>全部已读
+                                </button>
+                            </div>
+                            <div id="notificationList" class="divide-y divide-gray-100">
+                                <!-- 通知列表 -->
+                            </div>
+                            <div id="notificationPagination" class="p-3 border-t border-gray-100"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center space-x-2 sm:space-x-4 pl-2 sm:pl-4 border-l-2 border-gray-200">
+                        <div class="text-right">
+                            <p class="text-sm font-bold text-gray-900" id="userName"></p>
+                            <p class="text-xs text-indigo-600 font-medium" id="userRole"></p>
+                        </div>
+                        <button id="changePasswordBtn" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 sm:px-4 py-2.5 rounded-xl transition-all duration-300 shadow-sm font-medium">
+                            <i class="fas fa-key sm:mr-2"></i><span class="hidden sm:inline">改密码</span>
+                        </button>
+                        <button id="logoutBtn" class="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-5 py-2.5 rounded-xl transition-all duration-300 shadow-md hover:shadow-lg font-medium hover:scale-105">
+                            <i class="fas fa-sign-out-alt mr-2"></i>退出
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <!-- 统计卡片 -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-10">
+            <div class="stat-card rounded-2xl shadow-lg p-7 border-2 border-gray-100">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-600 text-sm font-bold mb-2 uppercase tracking-wide">总工单数</p>
+                        <p class="text-4xl font-black text-gray-900 mb-1" id="totalTickets">0</p>
+                        <p class="text-xs text-gray-500 font-medium">Total Tickets</p>
+                    </div>
+                    <div class="stat-icon w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-xl">
+                        <i class="fas fa-ticket-alt text-3xl text-white"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-card rounded-2xl shadow-lg p-7 border-2 border-gray-100">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-600 text-sm font-bold mb-2 uppercase tracking-wide">待处理</p>
+                        <p class="text-4xl font-black text-gray-900 mb-1" id="pendingTickets">0</p>
+                        <p class="text-xs text-gray-500 font-medium">Pending</p>
+                    </div>
+                    <div class="stat-icon w-16 h-16 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-2xl flex items-center justify-center shadow-xl">
+                        <i class="fas fa-clock text-3xl text-white"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-card rounded-2xl shadow-lg p-7 border-2 border-gray-100">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-600 text-sm font-bold mb-2 uppercase tracking-wide">处理中</p>
+                        <p class="text-4xl font-black text-gray-900 mb-1" id="processingTickets">0</p>
+                        <p class="text-xs text-gray-500 font-medium">Processing</p>
+                    </div>
+                    <div class="stat-icon w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-xl">
+                        <i class="fas fa-spinner text-3xl text-white"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-card rounded-2xl shadow-lg p-7 border-2 border-gray-100">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-600 text-sm font-bold mb-2 uppercase tracking-wide">已完成</p>
+                        <p class="text-4xl font-black text-gray-900 mb-1" id="completedTickets">0</p>
+                        <p class="text-xs text-gray-500 font-medium">Completed</p>
+                    </div>
+                    <div class="stat-icon w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center shadow-xl">
+                        <i class="fas fa-check-circle text-3xl text-white"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div id="satisfactionCard" class="hidden stat-card rounded-2xl shadow-lg p-7 border-2 border-gray-100">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-600 text-sm font-bold mb-2 uppercase tracking-wide">平均满意度</p>
+                        <p class="text-4xl font-black text-gray-900 mb-1" id="avgSatisfaction">0.0</p>
+                        <p class="text-xs text-gray-500 font-medium">Satisfaction</p>
+                    </div>
+                    <div class="stat-icon w-16 h-16 bg-gradient-to-br from-pink-500 to-red-500 rounded-2xl flex items-center justify-center shadow-xl">
+                        <i class="fas fa-heart text-3xl text-white"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 工程师满意度统计 (仅管理员和HR可见) -->
+        <div id="engineerStatsContainer" class="hidden bg-white rounded-2xl shadow-lg p-7 mb-10 border-2 border-gray-100">
+            <h3 class="text-sm font-bold text-gray-600 uppercase tracking-wider mb-5 flex items-center">
+                <i class="fas fa-star mr-2 text-yellow-500"></i>工程师满意度排名
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" id="engineerStatsList">
+                <!-- 动态加载 -->
+            </div>
+            <div id="engineerStatsPagination" class="pt-6 border-t border-gray-100 mt-6"></div>
+        </div>
+
+        <!-- 功能按钮区 -->
+        <div class="bg-white rounded-2xl shadow-lg p-7 mb-10 border-2 border-gray-100">
+            <h3 class="text-sm font-bold text-gray-600 uppercase tracking-wider mb-5 flex items-center">
+                <i class="fas fa-bolt mr-2 text-indigo-600"></i>快速操作
+            </h3>
+            <div class="flex flex-wrap gap-4">
+                <button id="createTicketBtn" class="btn-action bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-7 py-3.5 rounded-xl font-bold shadow-md relative z-10">
+                    <i class="fas fa-plus mr-2"></i>创建工单
+                </button>
+                <button id="myTicketsBtn" class="btn-action bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-7 py-3.5 rounded-xl font-bold shadow-md relative z-10">
+                    <i class="fas fa-list mr-2"></i>我的工单
+                </button>
+                <button id="userManageBtn" class="hidden btn-action bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-7 py-3.5 rounded-xl font-bold shadow-md relative z-10">
+                    <i class="fas fa-users mr-2"></i>用户管理
+                </button>
+                <button id="pendingTicketsBtn" class="hidden btn-action bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 text-white px-7 py-3.5 rounded-xl font-bold shadow-md relative z-10">
+                    <i class="fas fa-tasks mr-2"></i>待处理工单
+                </button>
+                <button id="workflowConfigBtn" class="hidden btn-action bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white px-7 py-3.5 rounded-xl font-bold shadow-md relative z-10">
+                    <i class="fas fa-project-diagram mr-2"></i>流程配置
+                </button>
+                <button id="webhookConfigBtn" class="btn-action bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white px-7 py-3.5 rounded-xl font-bold shadow-md relative z-10">
+                    <i class="fas fa-bell mr-2"></i>消息推送
+                </button>
+                <button id="ticketNumberConfigBtn" class="hidden btn-action bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-7 py-3.5 rounded-xl font-bold shadow-md relative z-10">
+                    <i class="fas fa-hashtag mr-2"></i>编号规则
+                </button>
+                <button id="auditLogBtn" class="hidden btn-action bg-gradient-to-r from-cyan-600 to-cyan-700 hover:from-cyan-700 hover:to-cyan-800 text-white px-7 py-3.5 rounded-xl font-bold shadow-md relative z-10">
+                    <i class="fas fa-shield-alt mr-2"></i>审计日志
+                </button>
+            </div>
+        </div>
+
+        <!-- 工单列表 -->
+        <div class="bg-white rounded-2xl shadow-lg border-2 border-gray-100">
+            <div class="p-7 border-b-2 border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+                <div class="flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center">
+                    <div>
+                        <h2 class="text-2xl font-black text-gray-900 flex items-center">
+                            <i class="fas fa-list-ul mr-3 text-indigo-600"></i>工单列表
+                        </h2>
+                        <p class="text-sm text-gray-600 mt-2 font-medium">管理和跟踪所有工单</p>
+                    </div>
+                    <div class="flex flex-col sm:flex-row gap-3 sm:space-x-0">
+                        <button onclick="loadTickets()" class="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-all font-bold hover:scale-105">
+                            <i class="fas fa-sync-alt mr-2"></i>刷新
+                        </button>
+                        <select id="engineerFilter" class="hidden px-5 py-2.5 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-bold text-gray-700 transition-all">
+                            <option value="">全部工程师</option>
+                        </select>
+                        <select id="statusFilter" onchange="filterTickets()" class="px-5 py-2.5 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-bold text-gray-700 transition-all">
+                            <option value="">全部状态</option>
+                            <option value="pending">待处理</option>
+                            <option value="claimed">已认领</option>
+                            <option value="processing">处理中</option>
+                            <option value="completed">已完成</option>
+                            <option value="closed">已结单</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
+                        <tr>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">工单编号</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">标题</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">分类</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">提交人</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">状态</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">优先级</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">创建时间</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ticketTableBody" class="bg-white divide-y-2 divide-gray-100">
+                        <!-- 工单列表将在这里动态加载 -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="ticketPagination" class="p-6 border-t border-gray-100"></div>
+        </div>
+    </div>
+
+    <!-- 创建工单模态框 -->
+    <div id="createTicketModal" class="hidden fixed inset-0 bg-black bg-opacity-50 modal-backdrop flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="sticky top-0 bg-white border-b border-gray-200 px-8 py-6 rounded-t-2xl">
+                <div class="flex justify-between items-center gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">
+                            <i class="fas fa-plus-circle mr-2 text-indigo-600"></i>创建工单
+                        </h2>
+                        <p class="text-sm text-gray-500 mt-1">填写工单信息并提交</p>
+                    </div>
+                    <button onclick="closeCreateTicketModal()" class="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-lg transition">
+                        <i class="fas fa-times text-2xl"></i>
+                    </button>
+                </div>
+            </div>
+
+            <form id="createTicketForm" class="p-8 space-y-5">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">工单标题 *</label>
+                    <input type="text" id="ticketTitle" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition" placeholder="请简要描述问题">
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">问题分类 *</label>
+                        <select id="ticketCategory" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition">
+                            <option value="">请选择分类</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">设备类型 *</label>
+                        <select id="equipmentType" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition">
+                            <option value="computer">电脑</option>
+                            <option value="printer">打印机</option>
+                            <option value="network">网络设备</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">优先级 *</label>
+                        <select id="ticketPriority" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition">
+                            <option value="low">低</option>
+                            <option value="medium" selected>中</option>
+                            <option value="high">高</option>
+                            <option value="urgent">紧急</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">位置</label>
+                        <input type="text" id="ticketLocation" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition" placeholder="例如：3楼办公室">
+                    </div>
+                </div>
+
+                <div id="dynamicFormContainer"></div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">问题描述 *</label>
+                    <textarea id="ticketDescription" required rows="4" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition resize-none" placeholder="请详细描述遇到的问题"></textarea>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-4 sm:space-x-0 pt-4">
+                    <button type="submit" class="flex-1 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white py-3.5 rounded-xl transition font-semibold shadow-lg hover:shadow-xl">
+                        <i class="fas fa-paper-plane mr-2"></i>提交工单
+                    </button>
+                    <button type="button" onclick="closeCreateTicketModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3.5 rounded-xl transition font-semibold">
+                        <i class="fas fa-times mr-2"></i>取消
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 工单详情模态框 -->
+    <div id="ticketDetailModal" class="hidden fixed inset-0 bg-black bg-opacity-50 modal-backdrop flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-hidden flex flex-col">
+            <div class="bg-white border-b border-gray-200 px-6 sm:px-8 py-6 rounded-t-2xl shrink-0">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">
+                            <i class="fas fa-info-circle mr-2 text-indigo-600"></i>工单详情
+                        </h2>
+                        <p class="text-sm text-gray-500 mt-1">查看工单完整信息</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="printCurrentTicket()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold transition shadow-sm">
+                            <i class="fas fa-print mr-2"></i>打印工单
+                        </button>
+                        <button onclick="closeTicketDetailModal()" class="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-lg transition">
+                            <i class="fas fa-times text-2xl"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="ticketDetailContent" class="p-5 sm:p-8 overflow-y-auto soft-scrollbar">
+                <!-- 工单详情内容将在这里动态加载 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 审计日志弹窗 -->
+    <div id="auditLogModal" class="hidden fixed inset-0 bg-black bg-opacity-50 modal-backdrop flex items-center justify-center z-[60] p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-cyan-50 to-white flex justify-between items-center shrink-0">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-900"><i class="fas fa-shield-alt mr-2 text-cyan-600"></i>审计日志</h3>
+                    <p class="text-sm text-gray-500 mt-1">查看最近登录和关键操作记录</p>
+                </div>
+                <button onclick="closeAuditLogModal()" class="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-lg transition">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="px-6 pt-5 flex gap-3 shrink-0">
+                <button id="loginLogTab" onclick="switchAuditTab('login')" class="px-4 py-2 rounded-xl bg-cyan-600 text-white font-bold">登录日志</button>
+                <button id="operationLogTab" onclick="switchAuditTab('operation')" class="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 font-bold hover:bg-gray-200">操作日志</button>
+            </div>
+            <div id="auditLogContent" class="p-6 overflow-y-auto soft-scrollbar">
+                <!-- 审计日志动态加载 -->
+            </div>
+            <div id="auditLogPagination" class="px-6 pb-5 shrink-0"></div>
+        </div>
+    </div>
+
+    <!-- 通用操作弹窗 -->
+    <div id="actionModal" class="hidden fixed inset-0 bg-black bg-opacity-50 modal-backdrop flex items-center justify-center z-[60] p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div class="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-white flex items-center justify-between">
+                <div>
+                    <h3 id="actionModalTitle" class="text-xl font-bold text-gray-900"></h3>
+                    <p id="actionModalDescription" class="text-sm text-gray-500 mt-1"></p>
+                </div>
+                <button onclick="closeActionModal()" class="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-lg transition">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div id="actionModalBody" class="p-6"></div>
+            <div class="px-6 py-4 bg-gray-50 flex flex-col-reverse sm:flex-row gap-3 sm:justify-end">
+                <button id="actionModalCancel" onclick="closeActionModal()" class="px-5 py-3 rounded-xl bg-white hover:bg-gray-100 text-gray-700 font-bold border border-gray-200 transition">取消</button>
+                <button id="actionModalConfirm" class="px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-md transition">
+                    <span id="actionModalConfirmText">确认</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 修改密码弹窗 -->
+    <div id="passwordModal" class="hidden fixed inset-0 bg-black bg-opacity-50 modal-backdrop flex items-center justify-center z-[60] p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div class="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-white flex justify-between items-center">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-900"><i class="fas fa-key mr-2 text-indigo-600"></i>修改密码</h3>
+                    <p class="text-sm text-gray-500 mt-1">更新后请使用新密码登录</p>
+                </div>
+                <button onclick="closePasswordModal()" class="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-lg transition">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <form id="passwordForm" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">原密码</label>
+                    <input type="password" id="oldPassword" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500" autocomplete="current-password">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">新密码</label>
+                    <input type="password" id="newPassword" required minlength="6" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500" autocomplete="new-password">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">确认新密码</label>
+                    <input type="password" id="confirmPassword" required minlength="6" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500" autocomplete="new-password">
+                </div>
+                <div class="flex flex-col-reverse sm:flex-row gap-3 pt-2">
+                    <button type="button" onclick="closePasswordModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-bold transition">取消</button>
+                    <button id="passwordSubmitBtn" type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-bold transition">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 工单编号规则弹窗 -->
+    <div id="ticketNumberModal" class="hidden fixed inset-0 bg-black bg-opacity-50 modal-backdrop flex items-center justify-center z-[60] p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div class="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-slate-50 to-white flex justify-between items-center">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-900"><i class="fas fa-hashtag mr-2 text-slate-600"></i>工单编号规则</h3>
+                    <p class="text-sm text-gray-500 mt-1">新建工单时生效</p>
+                </div>
+                <button onclick="closeTicketNumberModal()" class="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-lg transition">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <form id="ticketNumberForm" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">编号前缀</label>
+                    <input type="text" id="ticketNoPrefix" required maxlength="20" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-slate-500" placeholder="TK">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">日期格式</label>
+                    <input type="text" id="ticketNoDateFormat" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-slate-500 font-mono" placeholder="%Y%m%d%H%M%S">
+                    <p class="text-xs text-gray-500 mt-1">例如 %Y%m%d%H%M%S 会生成 20260604153020</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">末尾随机码位数</label>
+                    <input type="number" id="ticketNoRandomDigits" required min="1" max="12" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-slate-500" value="3">
+                </div>
+                <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                    <p class="text-xs text-gray-500 mb-1">预览</p>
+                    <p id="ticketNoPreview" class="font-mono font-bold text-slate-800">TK20260604153020123</p>
+                </div>
+                <div class="flex flex-col-reverse sm:flex-row gap-3 pt-2">
+                    <button type="button" onclick="closeTicketNumberModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-bold transition">取消</button>
+                    <button id="ticketNumberSubmitBtn" type="submit" class="flex-1 bg-slate-700 hover:bg-slate-800 text-white py-3 rounded-xl font-bold transition">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="toastContainer" class="fixed top-4 right-4 left-4 sm:left-auto z-[80] space-y-3 pointer-events-none"></div>
+
+    <script src="/static/pagination.js?v=20260610"></script>
+    <script src="/static/dashboard.js?v=20260610"></script>
+    <script src="/static/watermark.js?v=202606042230"></script>
+</body>
+</html>

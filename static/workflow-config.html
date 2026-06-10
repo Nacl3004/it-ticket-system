@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工单流程配置 - IT运维工单系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%);
+        }
+        
+        .config-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .config-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+        }
+        
+        .btn-hover {
+            transition: all 0.3s ease;
+        }
+        
+        .btn-hover:hover {
+            transform: translateY(-2px) scale(1.05);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- 顶部导航栏 -->
+    <nav class="bg-white border-b-2 border-indigo-100 sticky top-0 z-40 shadow-xl">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-18">
+                <div class="flex items-center">
+                    <a href="/static/dashboard.html" class="flex items-center space-x-4 group">
+                        <div class="w-12 h-12 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-6 transition">
+                            <i class="fas fa-tools text-2xl text-white"></i>
+                        </div>
+                        <div>
+                            <h1 class="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">IT运维工单系统</h1>
+                            <p class="text-xs text-gray-500 font-medium">Workflow Configuration</p>
+                        </div>
+                    </a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/static/dashboard.html" class="text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 px-5 py-2.5 rounded-xl transition font-bold">
+                        <i class="fas fa-arrow-left mr-2"></i>返回控制台
+                    </a>
+                    <div class="flex items-center space-x-3 pl-4 border-l-2 border-gray-200">
+                        <div class="text-right">
+                            <p class="text-sm font-bold text-gray-900" id="userName"></p>
+                            <p class="text-xs text-indigo-600 font-medium" id="userRole"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <!-- 说明卡片 -->
+        <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-7 mb-8 config-card">
+            <h3 class="font-black text-blue-900 mb-3 text-lg flex items-center">
+                <i class="fas fa-info-circle mr-3 text-2xl"></i>工单流程配置说明
+            </h3>
+            <p class="text-sm text-blue-800 mb-3 font-medium">
+                配置工单分类与IT人员的映射关系，实现工单的智能分配：
+            </p>
+            <ul class="text-sm text-blue-800 space-y-2 font-medium">
+                <li class="flex items-start">
+                    <i class="fas fa-check-circle mr-3 mt-0.5 text-blue-600"></i>
+                    <span>当用户提交工单时，系统会根据工单分类自动分配给对应的IT人员</span>
+                </li>
+                <li class="flex items-start">
+                    <i class="fas fa-check-circle mr-3 mt-0.5 text-blue-600"></i>
+                    <span>优先级数字越大，优先级越高（主要负责人设置为10，备用负责人设置为5）</span>
+                </li>
+                <li class="flex items-start">
+                    <i class="fas fa-check-circle mr-3 mt-0.5 text-blue-600"></i>
+                    <span>一个分类可以配置多个IT人员，系统会选择优先级最高的IT人员</span>
+                </li>
+                <li class="flex items-start">
+                    <i class="fas fa-check-circle mr-3 mt-0.5 text-blue-600"></i>
+                    <span>如果没有配置对应的IT人员，则通知所有IT人员</span>
+                </li>
+            </ul>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-100 config-card">
+            <div class="flex justify-between items-center mb-8">
+                <div>
+                    <h2 class="text-3xl font-black text-gray-900 flex items-center">
+                        <i class="fas fa-project-diagram mr-3 text-indigo-600"></i>工单分类与IT人员配置
+                    </h2>
+                    <p class="text-sm text-gray-600 mt-2 font-medium">管理工单自动分配规则</p>
+                </div>
+                <button id="showAddMappingBtn" class="btn-hover bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-7 py-3.5 rounded-xl transition font-bold shadow-lg">
+                    <i class="fas fa-plus mr-2"></i>添加配置
+                </button>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
+                        <tr>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">ID</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">工单分类</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">IT人员</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">用户名</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">优先级</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">创建时间</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="mappingTableBody" class="bg-white divide-y-2 divide-gray-100">
+                        <!-- 配置列表将在这里动态加载 -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="mappingPagination" class="pt-6 border-t border-gray-100 mt-4"></div>
+        </div>
+
+        <!-- 分类表单配置区域 -->
+        <div class="bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-100 config-card mt-8">
+            <div class="flex justify-between items-center mb-8">
+                <div>
+                    <h2 class="text-3xl font-black text-gray-900 flex items-center">
+                        <i class="fas fa-file-alt mr-3 text-indigo-600"></i>自定义表单配置
+                    </h2>
+                    <p class="text-sm text-gray-600 mt-2 font-medium">为不同分类配置自定义表单字段</p>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
+                        <tr>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">ID</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">工单分类</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">表单状态</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="categoryTableBody" class="bg-white divide-y-2 divide-gray-100">
+                        <!-- 分类列表 -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="categoryPagination" class="pt-6 border-t border-gray-100 mt-4"></div>
+        </div>
+    </div>
+
+    <!-- 添加配置模态框 -->
+    <div id="addMappingModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800">
+                    <i class="fas fa-plus-circle mr-2 text-indigo-600"></i>添加配置
+                </h2>
+                <button onclick="closeAddMappingModal()" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+
+            <form id="addMappingForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">工单分类 *</label>
+                    <select id="categoryId" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                        <option value="">请选择分类</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">IT人员 *</label>
+                    <select id="itUserId" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                        <option value="">请选择IT人员</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">优先级 *</label>
+                    <input type="number" id="priority" value="10" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="数字越大优先级越高">
+                    <p class="text-xs text-gray-500 mt-1">建议：主要负责人=10，备用负责人=5</p>
+                </div>
+
+                <div class="flex space-x-4 mt-6">
+                    <button type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg transition">
+                        <i class="fas fa-save mr-2"></i>保存配置
+                    </button>
+                    <button type="button" onclick="closeAddMappingModal()" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 py-3 rounded-lg transition">
+                        <i class="fas fa-times mr-2"></i>取消
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 表单配置模态框 -->
+    <div id="formConfigModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col">
+            <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-800 flex items-center">
+                        <i class="fas fa-edit mr-2 text-indigo-600"></i>表单设计器
+                    </h2>
+                    <p class="text-xs text-gray-500 mt-1" id="configCategoryName"></p>
+                </div>
+                <div class="flex space-x-3">
+                    <button onclick="window.saveFormConfig()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition text-sm font-bold shadow-md">
+                        <i class="fas fa-save mr-2"></i>保存配置
+                    </button>
+                    <button onclick="closeFormConfigModal()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition text-sm font-bold">
+                        <i class="fas fa-times mr-2"></i>关闭
+                    </button>
+                </div>
+            </div>
+            
+            <div class="flex-1 flex overflow-hidden">
+                <!-- 左侧组件库 -->
+                <div class="w-64 bg-gray-50 border-r border-gray-200 flex flex-col">
+                    <div class="p-4 border-b border-gray-200">
+                        <h3 class="font-bold text-gray-700 text-sm">组件库</h3>
+                        <p class="text-xs text-gray-500 mt-1">拖拽组件到画布</p>
+                    </div>
+                    <div class="p-4 space-y-3 overflow-y-auto flex-1">
+                        <div class="component-item bg-white p-3 rounded-lg border border-gray-200 shadow-sm cursor-move hover:border-indigo-500 hover:shadow-md transition flex items-center" draggable="true" data-type="text">
+                            <i class="fas fa-font w-8 text-indigo-500"></i>
+                            <span class="text-sm font-medium text-gray-700">单行文本</span>
+                        </div>
+                        <div class="component-item bg-white p-3 rounded-lg border border-gray-200 shadow-sm cursor-move hover:border-indigo-500 hover:shadow-md transition flex items-center" draggable="true" data-type="textarea">
+                            <i class="fas fa-align-left w-8 text-indigo-500"></i>
+                            <span class="text-sm font-medium text-gray-700">多行文本</span>
+                        </div>
+                        <div class="component-item bg-white p-3 rounded-lg border border-gray-200 shadow-sm cursor-move hover:border-indigo-500 hover:shadow-md transition flex items-center" draggable="true" data-type="number">
+                            <i class="fas fa-hashtag w-8 text-indigo-500"></i>
+                            <span class="text-sm font-medium text-gray-700">数字输入</span>
+                        </div>
+                        <div class="component-item bg-white p-3 rounded-lg border border-gray-200 shadow-sm cursor-move hover:border-indigo-500 hover:shadow-md transition flex items-center" draggable="true" data-type="select">
+                            <i class="fas fa-list-ul w-8 text-indigo-500"></i>
+                            <span class="text-sm font-medium text-gray-700">下拉选择</span>
+                        </div>
+                        <div class="component-item bg-white p-3 rounded-lg border border-gray-200 shadow-sm cursor-move hover:border-indigo-500 hover:shadow-md transition flex items-center" draggable="true" data-type="checkbox">
+                            <i class="fas fa-check-square w-8 text-indigo-500"></i>
+                            <span class="text-sm font-medium text-gray-700">复选框</span>
+                        </div>
+                        <div class="component-item bg-white p-3 rounded-lg border border-gray-200 shadow-sm cursor-move hover:border-indigo-500 hover:shadow-md transition flex items-center" draggable="true" data-type="date">
+                            <i class="fas fa-calendar-alt w-8 text-indigo-500"></i>
+                            <span class="text-sm font-medium text-gray-700">日期选择</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 中间画布 -->
+                <div class="flex-1 bg-gray-100 p-8 overflow-y-auto relative" id="formCanvasContainer">
+                    <div id="formCanvas" class="bg-white min-h-[600px] rounded-xl shadow-sm border border-gray-200 p-8 space-y-4">
+                        <div id="emptyCanvasTip" class="text-center py-20 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
+                            <i class="fas fa-plus-circle text-4xl mb-3 text-gray-300"></i>
+                            <p>从左侧拖拽组件到此处</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧属性配置 -->
+                <div class="w-80 bg-white border-l border-gray-200 flex flex-col">
+                    <div class="p-4 border-b border-gray-200 bg-gray-50">
+                        <h3 class="font-bold text-gray-700 text-sm">属性配置</h3>
+                        <p class="text-xs text-gray-500 mt-1" id="propConfigTip">请选择一个组件进行配置</p>
+                    </div>
+                    <div id="propertyPanel" class="p-5 overflow-y-auto flex-1 hidden">
+                        <form id="propertyForm" class="space-y-5">
+                            <input type="hidden" id="propId">
+                            
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">标题 (Label)</label>
+                                <input type="text" id="propLabel" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">字段名 (Key)</label>
+                                <input type="text" id="propKey" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-gray-50" readonly>
+                                <p class="text-xs text-gray-400 mt-1">系统自动生成，不可修改</p>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">占位符 (Placeholder)</label>
+                                <input type="text" id="propPlaceholder" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                            </div>
+
+                            <div class="flex items-center">
+                                <input type="checkbox" id="propRequired" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                                <label for="propRequired" class="ml-2 block text-sm text-gray-700 font-medium">必填字段</label>
+                            </div>
+
+                            <div id="optionsConfig" class="hidden">
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">选项配置 (每行一个)</label>
+                                <textarea id="propOptions" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="选项A&#10;选项B&#10;选项C"></textarea>
+                            </div>
+
+                            <div class="pt-4 border-t border-gray-200">
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-2">显示条件</label>
+                                <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-3">
+                                    <div>
+                                        <label class="block text-xs text-gray-500 mb-1">依赖字段</label>
+                                        <select id="propConditionField" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                                            <option value="">无依赖</option>
+                                        </select>
+                                    </div>
+                                    <div id="conditionValueContainer" class="hidden">
+                                        <label class="block text-xs text-gray-500 mb-1">当值为...</label>
+                                        <input type="text" id="propConditionValue" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="pt-4">
+                                <button type="button" onclick="deleteCurrentComponent()" class="w-full bg-red-50 text-red-600 hover:bg-red-100 px-4 py-2 rounded-lg transition text-sm font-bold border border-red-200">
+                                    <i class="fas fa-trash-alt mr-2"></i>删除此组件
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <input type="hidden" id="configCategoryId">
+        </div>
+    </div>
+
+    <script src="/static/watermark.js?v=202606042150"></script>
+    <script src="/static/pagination.js?v=20260610"></script>
+    <script>
+        let token = null;
+        let currentUser = null;
+        let currentFormFields = []; // 当前表单字段配置
+        let selectedFieldId = null; // 当前选中的字段ID
+        let allCategories = []; // 保存所有分类数据
+        let allMappings = [];
+        const categoryPagination = createClientPagination({
+            containerId: 'categoryPagination',
+            pageSize: 10,
+            onPageChange: () => renderCategories(allCategories, false)
+        });
+        const mappingPagination = createClientPagination({
+            containerId: 'mappingPagination',
+            pageSize: 10,
+            onPageChange: () => renderMappings(allMappings, false)
+        });
+
+        // 定义函数
+        function showAddMappingModal() {
+            console.log('showAddMappingModal 被调用');
+            const modal = document.getElementById('addMappingModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                console.log('模态框已打开');
+            } else {
+                console.error('找不到添加配置模态框');
+            }
+        }
+
+        function closeAddMappingModal() {
+            console.log('closeAddMappingModal 被调用');
+            const modal = document.getElementById('addMappingModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                document.getElementById('addMappingForm').reset();
+            }
+        }
+
+        // 立即绑定到window，确保HTML onclick可以调用
+        window.showAddMappingModal = showAddMappingModal;
+        window.closeAddMappingModal = closeAddMappingModal;
+
+        // 定义其他模态框函数
+        function showFormConfigModal() {
+            document.getElementById('formConfigModal').classList.remove('hidden');
+        }
+
+        function closeFormConfigModal() {
+            document.getElementById('formConfigModal').classList.add('hidden');
+        }
+
+        function handleConfigClick(btn) {
+            const id = parseInt(btn.dataset.id);
+            const category = allCategories.find(c => c.id === id);
+            
+            if (category) {
+                openFormConfigModal(category.id, category.category_name, category.form_template);
+            }
+        }
+
+        // 立即绑定到window
+        window.showFormConfigModal = showFormConfigModal;
+        window.closeFormConfigModal = closeFormConfigModal;
+        window.handleConfigClick = handleConfigClick;
+
+        function openFormConfigModal(id, name, templateJson) {
+            document.getElementById('configCategoryId').value = id;
+            document.getElementById('configCategoryName').textContent = `配置分类：${name}`;
+            
+            // 重置编辑器状态
+            currentFormFields = [];
+            selectedFieldId = null;
+            document.getElementById('propertyPanel').classList.add('hidden');
+            document.getElementById('propConfigTip').classList.remove('hidden');
+            
+            if (templateJson) {
+                try {
+                    // 如果已经是对象则直接使用，如果是字符串则解析
+                    const template = typeof templateJson === 'string' ? JSON.parse(templateJson) : templateJson;
+                    if (template.fields && Array.isArray(template.fields)) {
+                        currentFormFields = template.fields.map(f => ({
+                            ...f,
+                            id: f.id || 'field_' + Math.random().toString(36).substr(2, 9) // 确保有ID
+                        }));
+                    }
+                } catch (e) {
+                    console.error('解析模板失败', e);
+                }
+            }
+            
+            renderCanvas();
+            document.getElementById('formConfigModal').classList.remove('hidden');
+        }
+
+        // 定义saveFormConfig函数
+        window.saveFormConfig = async function() {
+            const categoryId = document.getElementById('configCategoryId').value;
+            
+            const template = {
+                fields: currentFormFields
+            };
+            
+            const templateStr = JSON.stringify(template);
+            
+            try {
+                const response = await fetch(`/api/categories/${categoryId}?token=${token}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        form_template: templateStr
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alert('配置保存成功！');
+                    closeFormConfigModal();
+                    loadCategories();
+                } else {
+                    alert(data.detail || '保存失败');
+                }
+            } catch (error) {
+                console.error('保存配置失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+
+        // 定义deleteMapping函数
+        window.deleteMapping = async function(mappingId) {
+            if (!confirm('确定要删除这条配置吗？')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/category-it-mapping/${mappingId}?token=${token}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alert('删除成功！');
+                    loadMappings();
+                } else {
+                    alert(data.detail || '删除失败');
+                }
+            } catch (error) {
+                console.error('删除配置失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('DOM加载完成，开始初始化...');
+            
+            token = sessionStorage.getItem('token');
+            
+            if (!token) {
+                window.location.href = '/static/index.html';
+                return;
+            }
+            
+            // 从后端验证token并获取最新用户信息
+            try {
+                const response = await fetch(`/api/current-user?token=${token}`);
+                if (!response.ok) {
+                    sessionStorage.removeItem('token');
+                    sessionStorage.removeItem('user');
+                    window.location.href = '/static/index.html';
+                    return;
+                }
+                
+                const userData = await response.json();
+                currentUser = userData;
+                sessionStorage.setItem('user', JSON.stringify(currentUser));
+                
+            } catch (error) {
+                console.error('获取用户信息失败:', error);
+                sessionStorage.removeItem('token');
+                sessionStorage.removeItem('user');
+                window.location.href = '/static/index.html';
+                return;
+            }
+            
+            if (!['super_admin', 'admin'].includes(currentUser.role_type)) {
+                alert('您没有权限访问此页面');
+                window.location.href = '/static/dashboard.html';
+                return;
+            }
+            
+            document.getElementById('userName').textContent = currentUser.real_name;
+            document.getElementById('userRole').textContent = currentUser.role_name;
+            
+            // 绑定添加配置按钮事件
+            const showAddMappingBtn = document.getElementById('showAddMappingBtn');
+            if (showAddMappingBtn) {
+                showAddMappingBtn.addEventListener('click', showAddMappingModal);
+                console.log('添加配置按钮事件已绑定');
+            } else {
+                console.error('找不到添加配置按钮');
+            }
+            
+            // 绑定表单提交事件
+            const addMappingForm = document.getElementById('addMappingForm');
+            if (addMappingForm) {
+                addMappingForm.addEventListener('submit', addMapping);
+                console.log('添加配置表单事件已绑定');
+            }
+            
+            // 初始化拖拽事件
+            initDragAndDrop();
+            // 初始化属性面板事件
+            initPropertyPanel();
+            
+            // 加载数据
+            try {
+                await loadCategories();
+                console.log('分类加载完成');
+            } catch (e) { console.error('加载分类失败', e); }
+            
+            try {
+                await loadITUsers();
+                console.log('IT人员加载完成');
+            } catch (e) { console.error('加载IT人员失败', e); }
+            
+            try {
+                await loadMappings();
+                console.log('配置列表加载完成');
+            } catch (e) { console.error('加载配置失败', e); }
+            
+            console.log('初始化完成');
+        });
+
+        // --- 拖拽逻辑 ---
+        function initDragAndDrop() {
+            const components = document.querySelectorAll('.component-item');
+            const canvas = document.getElementById('formCanvas');
+            
+            components.forEach(comp => {
+                comp.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('type', comp.dataset.type);
+                    e.dataTransfer.effectAllowed = 'copy';
+                });
+            });
+            
+            canvas.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+                canvas.classList.add('bg-indigo-50');
+            });
+            
+            canvas.addEventListener('dragleave', () => {
+                canvas.classList.remove('bg-indigo-50');
+            });
+            
+            canvas.addEventListener('drop', (e) => {
+                e.preventDefault();
+                canvas.classList.remove('bg-indigo-50');
+                const type = e.dataTransfer.getData('type');
+                if (type) {
+                    addField(type);
+                }
+            });
+        }
+
+        // 添加字段
+        function addField(type) {
+            const id = 'field_' + Date.now();
+            const field = {
+                id: id,
+                key: id, // 默认key与id相同
+                type: type,
+                label: getLabelByType(type),
+                required: false,
+                placeholder: '',
+                options: type === 'select' || type === 'checkbox' ? ['选项1', '选项2'] : [],
+                condition: null
+            };
+            
+            currentFormFields.push(field);
+            renderCanvas();
+            selectField(id);
+        }
+
+        function getLabelByType(type) {
+            const map = {
+                'text': '单行文本',
+                'textarea': '多行文本',
+                'number': '数字输入',
+                'select': '下拉选择',
+                'checkbox': '复选框',
+                'date': '日期选择'
+            };
+            return map[type] || '未命名字段';
+        }
+
+        // 渲染画布
+        function renderCanvas() {
+            const canvas = document.getElementById('formCanvas');
+            const emptyTip = document.getElementById('emptyCanvasTip');
+            
+            // 清空画布（保留提示元素）
+            canvas.innerHTML = '';
+            
+            if (currentFormFields.length === 0) {
+                canvas.appendChild(emptyTip);
+                emptyTip.classList.remove('hidden');
+                return;
+            }
+            
+            emptyTip.classList.add('hidden');
+            canvas.appendChild(emptyTip); // 重新添加提示元素但隐藏它
+            
+            currentFormFields.forEach(field => {
+                const el = document.createElement('div');
+                el.className = `p-4 border-2 rounded-lg cursor-pointer transition relative group ${selectedFieldId === field.id ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200' : 'border-gray-200 hover:border-indigo-300 bg-white'}`;
+                el.onclick = (e) => {
+                    e.stopPropagation();
+                    selectField(field.id);
+                };
+                
+                let inputHtml = '';
+                if (field.type === 'text') {
+                    inputHtml = `<input type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50" disabled placeholder="${field.placeholder || '请输入...'}">`;
+                } else if (field.type === 'textarea') {
+                    inputHtml = `<textarea class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50" disabled rows="3" placeholder="${field.placeholder || '请输入...'}"></textarea>`;
+                } else if (field.type === 'number') {
+                    inputHtml = `<input type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50" disabled placeholder="${field.placeholder || '请输入数字...'}">`;
+                } else if (field.type === 'select') {
+                    inputHtml = `<select class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50" disabled>
+                        ${field.options.map(opt => `<option>${opt}</option>`).join('')}
+                    </select>`;
+                } else if (field.type === 'checkbox') {
+                    inputHtml = `<div class="space-y-2">
+                        ${field.options.map(opt => `
+                            <div class="flex items-center">
+                                <input type="checkbox" disabled class="h-4 w-4 text-indigo-600 border-gray-300 rounded">
+                                <span class="ml-2 text-sm text-gray-700">${opt}</span>
+                            </div>
+                        `).join('')}
+                    </div>`;
+                } else if (field.type === 'date') {
+                    inputHtml = `<input type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50" disabled>`;
+                }
+
+                // 条件标识
+                let conditionBadge = '';
+                if (field.condition && field.condition.field) {
+                    const depField = currentFormFields.find(f => f.key === field.condition.field);
+                    const depLabel = depField ? depField.label : field.condition.field;
+                    conditionBadge = `<div class="absolute top-2 right-2 bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full flex items-center"><i class="fas fa-code-branch mr-1"></i>依赖: ${depLabel}</div>`;
+                }
+
+                el.innerHTML = `
+                    <div class="mb-2 flex items-center justify-between">
+                        <label class="block text-sm font-bold text-gray-700">
+                            ${field.label}
+                            ${field.required ? '<span class="text-red-500">*</span>' : ''}
+                        </label>
+                    </div>
+                    ${inputHtml}
+                    ${conditionBadge}
+                    <div class="absolute -right-3 -top-3 hidden group-hover:flex">
+                        <button onclick="deleteField(event, '${field.id}')" class="bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md hover:bg-red-600 transition">
+                            <i class="fas fa-times text-xs"></i>
+                        </button>
+                    </div>
+                `;
+                
+                canvas.appendChild(el);
+            });
+        }
+
+        // 选中字段
+        function selectField(id) {
+            selectedFieldId = id;
+            renderCanvas();
+            
+            const field = currentFormFields.find(f => f.id === id);
+            if (!field) return;
+            
+            // 更新属性面板
+            document.getElementById('propConfigTip').classList.add('hidden');
+            document.getElementById('propertyPanel').classList.remove('hidden');
+            
+            document.getElementById('propId').value = field.id;
+            document.getElementById('propLabel').value = field.label;
+            document.getElementById('propKey').value = field.key;
+            document.getElementById('propPlaceholder').value = field.placeholder || '';
+            document.getElementById('propRequired').checked = field.required;
+            
+            // 选项配置
+            const optionsConfig = document.getElementById('optionsConfig');
+            if (field.type === 'select' || field.type === 'checkbox') {
+                optionsConfig.classList.remove('hidden');
+                document.getElementById('propOptions').value = field.options.join('\n');
+            } else {
+                optionsConfig.classList.add('hidden');
+            }
+            
+            // 条件配置
+            updateConditionOptions(field);
+        }
+
+        // 更新条件选项
+        function updateConditionOptions(currentField) {
+            const select = document.getElementById('propConditionField');
+            select.innerHTML = '<option value="">无依赖</option>';
+            
+            // 只能依赖于在当前字段之前的 select/checkbox 字段
+            const currentIndex = currentFormFields.findIndex(f => f.id === currentField.id);
+            const availableFields = currentFormFields.slice(0, currentIndex).filter(f => f.type === 'select' || f.type === 'checkbox');
+            
+            availableFields.forEach(f => {
+                const option = document.createElement('option');
+                option.value = f.key;
+                option.textContent = f.label;
+                select.appendChild(option);
+            });
+            
+            const valContainer = document.getElementById('conditionValueContainer');
+            if (currentField.condition && currentField.condition.field) {
+                select.value = currentField.condition.field;
+                document.getElementById('propConditionValue').value = currentField.condition.value || '';
+                valContainer.classList.remove('hidden');
+            } else {
+                select.value = '';
+                valContainer.classList.add('hidden');
+            }
+        }
+
+        // 初始化属性面板事件
+        function initPropertyPanel() {
+            const inputs = ['propLabel', 'propPlaceholder', 'propRequired', 'propOptions', 'propConditionField', 'propConditionValue'];
+            
+            inputs.forEach(id => {
+                const el = document.getElementById(id);
+                el.addEventListener('input', updateCurrentField);
+                el.addEventListener('change', updateCurrentField);
+            });
+        }
+
+        // 更新当前字段
+        function updateCurrentField() {
+            if (!selectedFieldId) return;
+            
+            const field = currentFormFields.find(f => f.id === selectedFieldId);
+            if (!field) return;
+            
+            field.label = document.getElementById('propLabel').value;
+            field.placeholder = document.getElementById('propPlaceholder').value;
+            field.required = document.getElementById('propRequired').checked;
+            
+            if (field.type === 'select' || field.type === 'checkbox') {
+                const optionsStr = document.getElementById('propOptions').value;
+                field.options = optionsStr.split('\n').filter(opt => opt.trim() !== '');
+            }
+            
+            const conditionField = document.getElementById('propConditionField').value;
+            if (conditionField) {
+                field.condition = {
+                    field: conditionField,
+                    value: document.getElementById('propConditionValue').value
+                };
+                document.getElementById('conditionValueContainer').classList.remove('hidden');
+            } else {
+                field.condition = null;
+                document.getElementById('conditionValueContainer').classList.add('hidden');
+            }
+            
+            renderCanvas();
+        }
+
+        // 删除字段
+        function deleteField(e, id) {
+            e.stopPropagation();
+            if (!confirm('确定要删除这个字段吗？')) return;
+            
+            currentFormFields = currentFormFields.filter(f => f.id !== id);
+            if (selectedFieldId === id) {
+                selectedFieldId = null;
+                document.getElementById('propertyPanel').classList.add('hidden');
+                document.getElementById('propConfigTip').classList.remove('hidden');
+            }
+            renderCanvas();
+        }
+        
+        function deleteCurrentComponent() {
+            if (selectedFieldId) {
+                deleteField({stopPropagation:()=>{}}, selectedFieldId);
+            }
+        }
+
+        // --- 模态框与保存逻辑 ---
+
+        async function loadCategories() {
+            try {
+                const response = await fetch(`/api/categories?token=${token}`);
+                const data = await response.json();
+                
+                allCategories = data.categories; // 保存到全局变量
+
+                const select = document.getElementById('categoryId');
+                select.innerHTML = '<option value="">请选择分类</option>';
+                
+                data.categories.forEach(category => {
+                    const option = document.createElement('option');
+                    option.value = category.id;
+                    option.textContent = category.category_name;
+                    select.appendChild(option);
+                });
+
+                renderCategories(data.categories);
+            } catch (error) {
+                console.error('加载分类失败:', error);
+            }
+        }
+
+        function renderCategories(categories, resetPage = true) {
+            const tbody = document.getElementById('categoryTableBody');
+            allCategories = categories;
+            categoryPagination.setTotal(categories.length, resetPage);
+            
+            if (categories.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">暂无分类</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = categoryPagination.slice(categories).map(category => {
+                const hasTemplate = !!category.form_template;
+                const statusBadge = hasTemplate 
+                    ? '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">已配置</span>'
+                    : '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">默认</span>';
+                
+                return `
+                    <tr class="hover:bg-gray-50 transition">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${category.id}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-indigo-600">${category.category_name}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${statusBadge}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <button 
+                                data-id="${category.id}" 
+                                onclick="handleConfigClick(this)" 
+                                class="text-indigo-600 hover:text-indigo-900 transition"
+                            >
+                                <i class="fas fa-edit mr-1"></i>配置表单
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function loadITUsers() {
+            try {
+                const response = await fetch(`/api/users?token=${token}`);
+                const data = await response.json();
+                
+                const select = document.getElementById('itUserId');
+                select.innerHTML = '<option value="">请选择IT人员</option>';
+                
+                const itUsers = data.users.filter(user => user.role_type === 'it');
+                
+                itUsers.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.id;
+                    option.textContent = `${user.real_name} (${user.username})`;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('加载IT人员失败:', error);
+            }
+        }
+
+        async function loadMappings() {
+            try {
+                const response = await fetch(`/api/category-it-mapping?token=${token}`);
+                const data = await response.json();
+                
+                allMappings = data.mappings;
+                renderMappings(allMappings);
+            } catch (error) {
+                console.error('加载配置列表失败:', error);
+            }
+        }
+
+        function renderMappings(mappings, resetPage = true) {
+            const tbody = document.getElementById('mappingTableBody');
+            allMappings = mappings;
+            mappingPagination.setTotal(mappings.length, resetPage);
+            
+            if (mappings.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">暂无配置</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = mappingPagination.slice(mappings).map(mapping => {
+                const priorityBadge = mapping.priority >= 10 
+                    ? '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">高优先级</span>'
+                    : mapping.priority >= 5
+                    ? '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">中优先级</span>'
+                    : '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">低优先级</span>';
+                
+                return `
+                    <tr class="hover:bg-gray-50 transition">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${mapping.id}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-indigo-600">${mapping.category_name}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${mapping.it_user_name}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${mapping.it_username}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            ${priorityBadge}
+                            <span class="ml-2 text-sm text-gray-600">(${mapping.priority})</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${formatDateTime(mapping.created_at)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <button onclick="window.deleteMapping(${mapping.id})" class="text-red-600 hover:text-red-800 transition">
+                                <i class="fas fa-trash mr-1"></i>删除
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function formatDateTime(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(String(dateStr).replace('T', ' ').replace(/-/g, '/'));
+            return date.toLocaleString('zh-CN', {
+                timeZone: 'Asia/Shanghai',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+        }
+
+        async function addMapping(e) {
+            e.preventDefault();
+            
+            const categoryIdVal = document.getElementById('categoryId').value;
+            const itUserIdVal = document.getElementById('itUserId').value;
+            const priorityVal = document.getElementById('priority').value;
+            
+            if (!categoryIdVal || !itUserIdVal) {
+                alert('请选择工单分类和IT人员');
+                return;
+            }
+            
+            const categoryId = parseInt(categoryIdVal);
+            const itUserId = parseInt(itUserIdVal);
+            const priority = parseInt(priorityVal) || 0;
+            
+            try {
+                const response = await fetch(`/api/category-it-mapping?token=${token}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        category_id: categoryId,
+                        it_user_id: itUserId,
+                        priority: priority
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alert('配置添加成功！');
+                    closeAddMappingModal();
+                    loadMappings();
+                } else {
+                    alert(data.detail || '添加失败');
+                }
+            } catch (error) {
+                console.error('添加配置失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+    </script>
+</body>
+</html>

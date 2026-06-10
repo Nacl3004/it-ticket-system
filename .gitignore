@@ -1,0 +1,38 @@
+# macOS and editors
+.DS_Store
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+.venv-*/
+venv/
+
+# Runtime data
+*.log
+logs/
+tmp/
+*.pid
+
+# Local and production secrets
+.env
+.env.*
+!.env.example
+
+# Local databases and generated files
+*.db
+*.sqlite
+*.sqlite3
+uploads/
+
+# Deployment archives and backups
+*.tar
+*.tar.gz
+*.zip
+backup*/
+

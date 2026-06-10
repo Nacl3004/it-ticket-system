@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>消息推送配置 - IT运维工单系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%);
+        }
+        
+        .card-hover {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+        }
+        
+        .btn-hover {
+            transition: all 0.3s ease;
+        }
+        
+        .btn-hover:hover {
+            transform: translateY(-2px) scale(1.05);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+        }
+        
+        .platform-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+        
+        .platform-dingtalk {
+            background: linear-gradient(135deg, #1890ff 0%, #0050b3 100%);
+            color: white;
+        }
+        
+        .platform-feishu {
+            background: linear-gradient(135deg, #00d4aa 0%, #00a870 100%);
+            color: white;
+        }
+        
+        .platform-wechat {
+            background: linear-gradient(135deg, #07c160 0%, #059048 100%);
+            color: white;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- 顶部导航栏 -->
+    <nav class="bg-white shadow-xl border-b-2 border-indigo-100">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-18">
+                <div class="flex items-center">
+                    <a href="/static/dashboard.html" class="flex items-center space-x-4 group">
+                        <div class="w-12 h-12 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-6 transition">
+                            <i class="fas fa-tools text-2xl text-white"></i>
+                        </div>
+                        <div>
+                            <span class="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">IT运维工单系统</span>
+                            <p class="text-xs text-gray-500 font-medium">Webhook Configuration</p>
+                        </div>
+                    </a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/static/dashboard.html" class="text-gray-600 hover:text-indigo-600 transition-all font-bold px-5 py-2.5 rounded-xl hover:bg-indigo-50">
+                        <i class="fas fa-arrow-left mr-2"></i>返回控制台
+                    </a>
+                    <div class="flex items-center space-x-3 pl-4 border-l-2 border-gray-200">
+                        <div class="text-right">
+                            <p class="text-sm font-bold text-gray-900" id="userName"></p>
+                            <p class="text-xs text-indigo-600 font-medium" id="userRole"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <!-- 说明卡片 -->
+        <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl shadow-lg p-6 mb-8 border-2 border-blue-100">
+            <div class="flex items-start space-x-4">
+                <div class="flex-shrink-0">
+                    <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-info-circle text-2xl text-white"></i>
+                    </div>
+                </div>
+                <div class="flex-1">
+                    <h3 class="text-lg font-bold text-gray-900 mb-2">个人消息推送配置</h3>
+                    <p class="text-sm text-gray-700 mb-3">配置您的个人消息推送后，当您参与的工单有状态变更时，系统会自动推送消息到您的钉钉、飞书或企业微信。</p>
+                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3">
+                        <p class="text-sm text-yellow-800"><i class="fas fa-lightbulb mr-2"></i><strong>提示：</strong>每个用户可以配置自己的推送地址，只会收到与自己相关的工单通知（您提交的工单或分配给您的工单）。</p>
+                    </div>
+                    <div class="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-3">
+                        <p class="text-sm text-purple-800"><i class="fas fa-broadcast-tower mr-2"></i><strong>全局推送：</strong>管理员可以创建全局机器人配置，所有工单事件都会同步推送到统一群。</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                        <div class="bg-white rounded-lg p-4 shadow-sm">
+                            <div class="flex items-center space-x-2 mb-2">
+                                <i class="fab fa-app-store text-blue-600"></i>
+                                <span class="font-bold text-gray-900">钉钉机器人</span>
+                            </div>
+                            <p class="text-xs text-gray-600">支持加签验证，消息格式为Markdown</p>
+                        </div>
+                        <div class="bg-white rounded-lg p-4 shadow-sm">
+                            <div class="flex items-center space-x-2 mb-2">
+                                <i class="fas fa-feather text-green-600"></i>
+                                <span class="font-bold text-gray-900">飞书机器人</span>
+                            </div>
+                            <p class="text-xs text-gray-600">支持签名验证，消息格式为卡片</p>
+                        </div>
+                        <div class="bg-white rounded-lg p-4 shadow-sm">
+                            <div class="flex items-center space-x-2 mb-2">
+                                <i class="fab fa-weixin text-green-600"></i>
+                                <span class="font-bold text-gray-900">企业微信</span>
+                            </div>
+                            <p class="text-xs text-gray-600">消息格式为Markdown</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 配置列表 -->
+        <div class="bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-100 card-hover">
+            <div class="flex justify-between items-center mb-8">
+                <div>
+                    <h2 class="text-3xl font-black text-gray-900 flex items-center">
+                        <i class="fas fa-bell mr-3 text-indigo-600"></i>消息推送配置
+                    </h2>
+                    <p class="text-sm text-gray-600 mt-2 font-medium">管理企业消息推送webhook配置</p>
+                </div>
+                <button onclick="showCreateModal()" class="btn-hover bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-7 py-3.5 rounded-xl transition font-bold shadow-lg">
+                    <i class="fas fa-plus mr-2"></i>添加配置
+                </button>
+            </div>
+
+            <div id="configList" class="space-y-4">
+                <!-- 配置列表将在这里动态加载 -->
+            </div>
+            <div id="configPagination" class="pt-6 border-t border-gray-100 mt-6"></div>
+        </div>
+
+        <!-- 推送模板配置 -->
+        <div id="templateSection" class="hidden bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-100 card-hover mt-8">
+            <div class="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center mb-8">
+                <div>
+                    <h2 class="text-3xl font-black text-gray-900 flex items-center">
+                        <i class="fas fa-file-alt mr-3 text-purple-600"></i>消息模板
+                    </h2>
+                    <p class="text-sm text-gray-600 mt-2 font-medium">自定义工单流转推送内容，每个事件启用一个模板</p>
+                </div>
+                <button onclick="showTemplateModal()" class="btn-hover bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-7 py-3.5 rounded-xl transition font-bold shadow-lg">
+                    <i class="fas fa-plus mr-2"></i>新增模板
+                </button>
+            </div>
+            <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 mb-6">
+                <p class="text-sm text-indigo-800 font-semibold mb-2">可用变量</p>
+                <p id="templateVariables" class="text-xs text-indigo-700 font-mono break-all"></p>
+            </div>
+            <div id="templateList" class="space-y-4"></div>
+            <div id="templatePagination" class="pt-6 border-t border-gray-100 mt-6"></div>
+        </div>
+    </div>
+
+    <!-- 创建/编辑配置模态框 -->
+    <div id="configModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800">
+                    <i class="fas fa-cog mr-2 text-indigo-600"></i><span id="modalTitle">添加配置</span>
+                </h2>
+                <button onclick="closeModal()" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+
+            <form id="configForm" class="space-y-5">
+                <input type="hidden" id="configId">
+                
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">配置名称 *</label>
+                    <input type="text" id="configName" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500" placeholder="例如：技术部钉钉群">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">平台类型 *</label>
+                    <select id="platform" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500">
+                        <option value="">请选择平台</option>
+                        <option value="dingtalk">钉钉</option>
+                        <option value="feishu">飞书</option>
+                        <option value="wechat">企业微信</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Webhook地址 *</label>
+                    <textarea id="webhookUrl" required rows="3" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 resize-none font-mono text-sm" placeholder="粘贴机器人的Webhook地址"></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">签名密钥（可选）</label>
+                    <input type="text" id="secret" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 font-mono text-sm" placeholder="如果启用了加签/签名验证，请填写密钥">
+                    <p class="text-xs text-gray-500 mt-1">钉钉和飞书支持签名验证，企业微信不需要</p>
+                </div>
+
+                <div id="scopeSection" class="hidden">
+                    <label class="flex items-center space-x-3 p-4 bg-purple-50 border border-purple-200 rounded-xl cursor-pointer">
+                        <input type="checkbox" id="isGlobal" class="w-5 h-5 text-purple-600 rounded">
+                        <span>
+                            <span class="block text-sm font-semibold text-gray-800">设为全局推送配置</span>
+                            <span class="block text-xs text-gray-500 mt-1">全局配置会接收所有工单事件，适合统一推送到 IT 运维群。</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-3">通知事件（可选）</label>
+                    <div class="space-y-2">
+                        <label class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                            <input type="checkbox" class="notify-event w-5 h-5 text-indigo-600 rounded" value="ticket_created">
+                            <span class="text-sm font-medium text-gray-700">工单创建</span>
+                        </label>
+                        <label class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                            <input type="checkbox" class="notify-event w-5 h-5 text-indigo-600 rounded" value="ticket_claimed">
+                            <span class="text-sm font-medium text-gray-700">工单认领</span>
+                        </label>
+                        <label class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                            <input type="checkbox" class="notify-event w-5 h-5 text-indigo-600 rounded" value="ticket_processing">
+                            <span class="text-sm font-medium text-gray-700">工单处理中</span>
+                        </label>
+                        <label class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                            <input type="checkbox" class="notify-event w-5 h-5 text-indigo-600 rounded" value="ticket_completed">
+                            <span class="text-sm font-medium text-gray-700">工单完成</span>
+                        </label>
+                        <label class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                            <input type="checkbox" class="notify-event w-5 h-5 text-indigo-600 rounded" value="ticket_closed">
+                            <span class="text-sm font-medium text-gray-700">工单结单</span>
+                        </label>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2">不选择则接收所有事件通知</p>
+                </div>
+
+                <div class="flex space-x-4 pt-4">
+                    <button type="submit" class="flex-1 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white py-3.5 rounded-xl transition font-semibold shadow-lg">
+                        <i class="fas fa-save mr-2"></i>保存配置
+                    </button>
+                    <button type="button" onclick="closeModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3.5 rounded-xl transition font-semibold">
+                        <i class="fas fa-times mr-2"></i>取消
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 创建/编辑模板模态框 -->
+    <div id="templateModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800">
+                    <i class="fas fa-file-alt mr-2 text-purple-600"></i><span id="templateModalTitle">新增模板</span>
+                </h2>
+                <button onclick="closeTemplateModal()" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <form id="templateForm" class="space-y-5">
+                <input type="hidden" id="templateId">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">模板名称 *</label>
+                    <input type="text" id="templateName" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500" placeholder="例如：默认工单完成通知">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">事件类型 *</label>
+                    <select id="templateEventType" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"></select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">消息标题 *</label>
+                    <input type="text" id="templateTitle" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500" placeholder="例如：工单已完成">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">消息内容 *</label>
+                    <textarea id="templateContent" required rows="8" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 resize-none font-mono text-sm" placeholder="支持变量：{ticket_no} {title} {operator} {time}"></textarea>
+                </div>
+                <label class="flex items-center space-x-3 p-4 bg-purple-50 border border-purple-200 rounded-xl cursor-pointer">
+                    <input type="checkbox" id="templateActive" class="w-5 h-5 text-purple-600 rounded">
+                    <span>
+                        <span class="block text-sm font-semibold text-gray-800">保存后启用这个模板</span>
+                        <span class="block text-xs text-gray-500 mt-1">启用后，同事件下其他模板会自动停用。</span>
+                    </span>
+                </label>
+                <div class="flex flex-col sm:flex-row gap-4 pt-4">
+                    <button type="submit" class="flex-1 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white py-3.5 rounded-xl transition font-semibold shadow-lg">
+                        <i class="fas fa-save mr-2"></i>保存模板
+                    </button>
+                    <button type="button" onclick="closeTemplateModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3.5 rounded-xl transition font-semibold">
+                        <i class="fas fa-times mr-2"></i>取消
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/watermark.js?v=202606042150"></script>
+    <script src="/static/pagination.js?v=20260610"></script>
+    <script>
+        let token = null;
+        let currentUser = null;
+        let webhookConfigs = [];
+        let webhookTemplates = [];
+        let webhookEvents = [];
+        const configPagination = createClientPagination({
+            containerId: 'configPagination',
+            pageSize: 6,
+            onPageChange: () => renderConfigs(webhookConfigs, false)
+        });
+        const templatePagination = createClientPagination({
+            containerId: 'templatePagination',
+            pageSize: 6,
+            onPageChange: () => renderTemplates(false)
+        });
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            token = sessionStorage.getItem('token');
+            
+            if (!token) {
+                window.location.href = '/static/index.html';
+                return;
+            }
+            
+            // 验证token并获取用户信息
+            try {
+                const response = await fetch(`/api/current-user?token=${token}`);
+                if (!response.ok) {
+                    sessionStorage.removeItem('token');
+                    sessionStorage.removeItem('user');
+                    window.location.href = '/static/index.html';
+                    return;
+                }
+                
+                currentUser = await response.json();
+                sessionStorage.setItem('user', JSON.stringify(currentUser));
+                
+            } catch (error) {
+                console.error('获取用户信息失败:', error);
+                window.location.href = '/static/index.html';
+                return;
+            }
+            
+            // 所有用户都可以访问此页面，配置自己的消息推送
+            
+            document.getElementById('userName').textContent = currentUser.real_name;
+            document.getElementById('userRole').textContent = currentUser.role_name;
+            if (['super_admin', 'admin'].includes(currentUser.role_type)) {
+                document.getElementById('scopeSection').classList.remove('hidden');
+                document.getElementById('templateSection').classList.remove('hidden');
+            }
+            
+            await loadConfigs();
+            if (['super_admin', 'admin'].includes(currentUser.role_type)) {
+                await loadTemplates();
+            }
+            
+            document.getElementById('configForm').addEventListener('submit', saveConfig);
+            document.getElementById('templateForm').addEventListener('submit', saveTemplate);
+        });
+
+        async function loadConfigs() {
+            try {
+                const response = await fetch(`/api/webhook-configs?token=${token}`);
+                const data = await response.json();
+                
+                webhookConfigs = data.configs;
+                renderConfigs(webhookConfigs);
+            } catch (error) {
+                console.error('加载配置失败:', error);
+            }
+        }
+
+        function renderConfigs(configs, resetPage = true) {
+            const container = document.getElementById('configList');
+            webhookConfigs = configs;
+            configPagination.setTotal(configs.length, resetPage);
+            
+            if (configs.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-12">
+                        <i class="fas fa-inbox text-6xl text-gray-300 mb-4"></i>
+                        <p class="text-gray-500 text-lg">暂无配置</p>
+                        <p class="text-gray-400 text-sm mt-2">点击上方"添加配置"按钮创建第一个webhook配置</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = configPagination.slice(configs).map(config => {
+                const platformInfo = {
+                    'dingtalk': { name: '钉钉', icon: 'fab fa-app-store', class: 'platform-dingtalk' },
+                    'feishu': { name: '飞书', icon: 'fas fa-feather', class: 'platform-feishu' },
+                    'wechat': { name: '企业微信', icon: 'fab fa-weixin', class: 'platform-wechat' }
+                };
+                
+                const platform = platformInfo[config.platform] || { name: config.platform, icon: 'fas fa-robot', class: 'bg-gray-500' };
+                const statusBadge = config.enabled 
+                    ? '<span class="px-3 py-1 text-xs font-bold rounded-full bg-green-100 text-green-800">已启用</span>'
+                    : '<span class="px-3 py-1 text-xs font-bold rounded-full bg-gray-100 text-gray-800">已禁用</span>';
+                
+                let events = [];
+                try {
+                    if (config.notify_events) {
+                        events = JSON.parse(config.notify_events);
+                    }
+                } catch (e) {}
+                
+                const eventsText = events.length > 0 ? events.join(', ') : '所有事件';
+                const scopeText = config.scope === 'global' ? '全局推送' : '个人推送';
+                const scopeClass = config.scope === 'global' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700';
+                
+                // 根据当前用户角色显示不同的用户信息
+                const userInfo = currentUser.role_type === 'super_admin' || currentUser.role_type === 'admin' 
+                    ? `所属用户：${config.user_name} (${config.username})` 
+                    : `创建时间：${formatDateTime(config.created_at)}`;
+                
+                return `
+                    <div class="border-2 border-gray-200 rounded-xl p-6 hover:border-indigo-300 transition">
+                        <div class="flex justify-between items-start mb-4">
+                            <div class="flex items-center space-x-4">
+                                <span class="platform-badge ${platform.class}">
+                                    <i class="${platform.icon} mr-2"></i>${platform.name}
+                                </span>
+                                <span class="px-3 py-1 text-xs font-bold rounded-full ${scopeClass}">${scopeText}</span>
+                                <div>
+                                    <h3 class="text-lg font-bold text-gray-900">${config.name}</h3>
+                                    <p class="text-sm text-gray-500 mt-1">${userInfo}</p>
+                                </div>
+                            </div>
+                            ${statusBadge}
+                        </div>
+                        
+                        <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                            <p class="text-xs text-gray-500 mb-1">Webhook地址</p>
+                            <p class="text-sm text-gray-700 font-mono break-all">${config.webhook_url.substring(0, 80)}...</p>
+                        </div>
+                        
+                        <div class="flex items-center justify-between">
+                            <div class="text-sm text-gray-600">
+                                <i class="fas fa-bell mr-2"></i>通知事件：${eventsText}
+                            </div>
+                            <div class="flex space-x-2">
+                                <button onclick="testConfig(${config.id})" class="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition text-sm font-semibold">
+                                    <i class="fas fa-paper-plane mr-1"></i>测试
+                                </button>
+                                <button onclick="toggleConfig(${config.id}, ${config.enabled})" class="px-4 py-2 ${config.enabled ? 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700' : 'bg-green-100 hover:bg-green-200 text-green-700'} rounded-lg transition text-sm font-semibold">
+                                    <i class="fas fa-${config.enabled ? 'pause' : 'play'} mr-1"></i>${config.enabled ? '禁用' : '启用'}
+                                </button>
+                                <button onclick="editConfig(${config.id})" class="px-4 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg transition text-sm font-semibold">
+                                    <i class="fas fa-edit mr-1"></i>编辑
+                                </button>
+                                <button onclick="deleteConfig(${config.id})" class="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition text-sm font-semibold">
+                                    <i class="fas fa-trash mr-1"></i>删除
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function formatDateTime(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(String(dateStr).replace('T', ' ').replace(/-/g, '/'));
+            return date.toLocaleString('zh-CN', {
+                timeZone: 'Asia/Shanghai',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+        }
+
+        function showCreateModal() {
+            document.getElementById('modalTitle').textContent = '添加配置';
+            document.getElementById('configForm').reset();
+            document.getElementById('configId').value = '';
+            document.getElementById('isGlobal').checked = false;
+            document.getElementById('configModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('configModal').classList.add('hidden');
+        }
+
+        async function editConfig(configId) {
+            try {
+                const response = await fetch(`/api/webhook-configs?token=${token}`);
+                const data = await response.json();
+                const config = data.configs.find(c => c.id === configId);
+                
+                if (!config) return;
+                
+                document.getElementById('modalTitle').textContent = '编辑配置';
+                document.getElementById('configId').value = config.id;
+                document.getElementById('configName').value = config.name;
+                document.getElementById('platform').value = config.platform;
+                document.getElementById('webhookUrl').value = config.webhook_url;
+                document.getElementById('secret').value = config.secret || '';
+                document.getElementById('isGlobal').checked = config.scope === 'global';
+                
+                // 设置事件复选框
+                document.querySelectorAll('.notify-event').forEach(checkbox => {
+                    checkbox.checked = false;
+                });
+                
+                if (config.notify_events) {
+                    try {
+                        const events = JSON.parse(config.notify_events);
+                        events.forEach(event => {
+                            const checkbox = document.querySelector(`.notify-event[value="${event}"]`);
+                            if (checkbox) checkbox.checked = true;
+                        });
+                    } catch (e) {}
+                }
+                
+                document.getElementById('configModal').classList.remove('hidden');
+            } catch (error) {
+                console.error('加载配置失败:', error);
+            }
+        }
+
+        async function saveConfig(e) {
+            e.preventDefault();
+            
+            const configId = document.getElementById('configId').value;
+            const name = document.getElementById('configName').value;
+            const platform = document.getElementById('platform').value;
+            const webhookUrl = document.getElementById('webhookUrl').value;
+            const secret = document.getElementById('secret').value;
+            const scope = document.getElementById('isGlobal').checked ? 'global' : 'personal';
+            
+            // 获取选中的事件
+            const events = Array.from(document.querySelectorAll('.notify-event:checked')).map(cb => cb.value);
+            
+            const configData = {
+                name,
+                platform,
+                webhook_url: webhookUrl,
+                secret: secret || null,
+                scope,
+                notify_events: events.length > 0 ? events : null
+            };
+            
+            try {
+                let response;
+                if (configId) {
+                    // 更新
+                    response = await fetch(`/api/webhook-configs/${configId}?token=${token}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(configData)
+                    });
+                } else {
+                    // 创建
+                    response = await fetch(`/api/webhook-configs?token=${token}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(configData)
+                    });
+                }
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alert(configId ? '配置更新成功！' : '配置创建成功！');
+                    closeModal();
+                    loadConfigs();
+                } else {
+                    alert(data.detail || '操作失败');
+                }
+            } catch (error) {
+                console.error('保存配置失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+
+        async function toggleConfig(configId, currentEnabled) {
+            const newEnabled = currentEnabled ? 0 : 1;
+            
+            try {
+                const response = await fetch(`/api/webhook-configs/${configId}?token=${token}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: newEnabled })
+                });
+                
+                if (response.ok) {
+                    loadConfigs();
+                } else {
+                    alert('操作失败');
+                }
+            } catch (error) {
+                console.error('切换状态失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+
+        async function deleteConfig(configId) {
+            if (!confirm('确定要删除这个配置吗？')) return;
+            
+            try {
+                const response = await fetch(`/api/webhook-configs/${configId}?token=${token}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    alert('删除成功！');
+                    loadConfigs();
+                } else {
+                    alert('删除失败');
+                }
+            } catch (error) {
+                console.error('删除配置失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+
+        async function testConfig(configId) {
+            try {
+                const response = await fetch(`/api/webhook-configs/${configId}/test?token=${token}`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alert('测试消息发送成功！请检查群聊是否收到消息。');
+                } else {
+                    alert(data.detail || '测试消息发送失败');
+                }
+            } catch (error) {
+                console.error('测试失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+
+        async function loadTemplates() {
+            try {
+                const response = await fetch(`/api/webhook-templates?token=${token}`);
+                const data = await response.json();
+                webhookTemplates = data.templates || [];
+                webhookEvents = data.events || [];
+                document.getElementById('templateVariables').textContent = (data.variables || []).map(v => `{${v}}`).join('  ');
+                renderTemplateEventOptions();
+                renderTemplates();
+            } catch (error) {
+                console.error('加载模板失败:', error);
+            }
+        }
+
+        function renderTemplateEventOptions() {
+            const select = document.getElementById('templateEventType');
+            select.innerHTML = webhookEvents.map(event => `<option value="${event.value}">${event.label}</option>`).join('');
+        }
+
+        function getEventLabel(eventType) {
+            const event = webhookEvents.find(item => item.value === eventType);
+            return event ? event.label : eventType;
+        }
+
+        function renderTemplates(resetPage = true) {
+            const container = document.getElementById('templateList');
+            templatePagination.setTotal(webhookTemplates.length, resetPage);
+            if (!webhookTemplates.length) {
+                container.innerHTML = `
+                    <div class="text-center py-10 text-gray-500">
+                        <i class="fas fa-file-alt text-5xl text-gray-300 mb-3"></i>
+                        <p class="font-semibold">暂无模板</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = templatePagination.slice(webhookTemplates).map(template => `
+                <div class="border-2 border-gray-200 rounded-xl p-6 hover:border-purple-300 transition">
+                    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-4">
+                        <div>
+                            <div class="flex flex-wrap gap-2 mb-2">
+                                <span class="px-3 py-1 text-xs font-bold rounded-full bg-indigo-100 text-indigo-700">${getEventLabel(template.event_type)}</span>
+                                ${template.is_active ? '<span class="px-3 py-1 text-xs font-bold rounded-full bg-green-100 text-green-700">启用中</span>' : '<span class="px-3 py-1 text-xs font-bold rounded-full bg-gray-100 text-gray-600">未启用</span>'}
+                            </div>
+                            <h3 class="text-lg font-bold text-gray-900">${template.name}</h3>
+                            <p class="text-sm text-gray-500 mt-1">${template.title_template}</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            ${template.is_active ? '' : `<button onclick="activateTemplate(${template.id})" class="px-4 py-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg transition text-sm font-semibold"><i class="fas fa-check mr-1"></i>启用</button>`}
+                            <button onclick="editTemplate(${template.id})" class="px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg transition text-sm font-semibold"><i class="fas fa-edit mr-1"></i>编辑</button>
+                            <button onclick="deleteTemplate(${template.id})" class="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition text-sm font-semibold"><i class="fas fa-trash mr-1"></i>删除</button>
+                        </div>
+                    </div>
+                    <pre class="bg-gray-50 rounded-lg p-4 text-xs text-gray-700 whitespace-pre-wrap font-mono border border-gray-100">${template.content_template}</pre>
+                </div>
+            `).join('');
+        }
+
+        function showTemplateModal() {
+            document.getElementById('templateModalTitle').textContent = '新增模板';
+            document.getElementById('templateForm').reset();
+            document.getElementById('templateId').value = '';
+            document.getElementById('templateActive').checked = false;
+            document.getElementById('templateModal').classList.remove('hidden');
+        }
+
+        function closeTemplateModal() {
+            document.getElementById('templateModal').classList.add('hidden');
+        }
+
+        function editTemplate(templateId) {
+            const template = webhookTemplates.find(item => item.id === templateId);
+            if (!template) return;
+            document.getElementById('templateModalTitle').textContent = '编辑模板';
+            document.getElementById('templateId').value = template.id;
+            document.getElementById('templateName').value = template.name;
+            document.getElementById('templateEventType').value = template.event_type;
+            document.getElementById('templateTitle').value = template.title_template;
+            document.getElementById('templateContent').value = template.content_template;
+            document.getElementById('templateActive').checked = !!template.is_active;
+            document.getElementById('templateModal').classList.remove('hidden');
+        }
+
+        async function saveTemplate(e) {
+            e.preventDefault();
+            const templateId = document.getElementById('templateId').value;
+            const payload = {
+                name: document.getElementById('templateName').value,
+                event_type: document.getElementById('templateEventType').value,
+                title_template: document.getElementById('templateTitle').value,
+                content_template: document.getElementById('templateContent').value,
+                is_active: document.getElementById('templateActive').checked ? 1 : 0
+            };
+
+            try {
+                const response = await fetch(templateId ? `/api/webhook-templates/${templateId}?token=${token}` : `/api/webhook-templates?token=${token}`, {
+                    method: templateId ? 'PUT' : 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    alert(templateId ? '模板更新成功！' : '模板创建成功！');
+                    closeTemplateModal();
+                    loadTemplates();
+                } else {
+                    alert(data.detail || '模板保存失败');
+                }
+            } catch (error) {
+                console.error('保存模板失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+
+        async function activateTemplate(templateId) {
+            try {
+                const response = await fetch(`/api/webhook-templates/${templateId}?token=${token}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_active: 1 })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    loadTemplates();
+                } else {
+                    alert(data.detail || '启用失败');
+                }
+            } catch (error) {
+                console.error('启用模板失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+
+        async function deleteTemplate(templateId) {
+            if (!confirm('确定要删除这个模板吗？')) return;
+            try {
+                const response = await fetch(`/api/webhook-templates/${templateId}?token=${token}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (response.ok) {
+                    alert('模板删除成功！');
+                    loadTemplates();
+                } else {
+                    alert(data.detail || '删除失败');
+                }
+            } catch (error) {
+                console.error('删除模板失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+    </script>
+</body>
+</html>

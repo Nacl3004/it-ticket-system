@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pymysql
+PyJWT
+bcrypt
+python-multipart
+websockets
+openpyxl
+httpx
+python-dotenv
