@@ -349,7 +349,3 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 2. WebSocket需要支持ws://或wss://协议
 3. 浏览器需要允许桌面通知权限
 4. 建议使用Chrome或Firefox浏览器
-
-## 开发者
-
-由 [with](https://with.woa.com/) 通过自然语言生成
