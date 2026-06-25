@@ -1,0 +1,11 @@
+html {
+    font-family: "PingFang SC", "PingFang TC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body,
+button,
+input,
+textarea,
+select {
+    font-family: inherit;
+}

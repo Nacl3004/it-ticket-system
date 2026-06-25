@@ -6,6 +6,7 @@
     <title>IT运维工单系统 - 控制台</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="fonts.css">
     <style>
         body {
             background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%);
@@ -303,6 +304,8 @@
                         <select id="statusFilter" onchange="filterTickets()" class="px-5 py-2.5 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-bold text-gray-700 transition-all">
                             <option value="">全部状态</option>
                             <option value="pending">待处理</option>
+                            <option value="pending_approval">待审批</option>
+                            <option value="rejected">已驳回</option>
                             <option value="claimed">已认领</option>
                             <option value="processing">处理中</option>
                             <option value="completed">已完成</option>
@@ -425,6 +428,9 @@
                         <p class="text-sm text-gray-500 mt-1">查看工单完整信息</p>
                     </div>
                     <div class="flex items-center gap-2">
+                        <button id="deleteTicketDetailBtn" onclick="deleteTicketFromDetail()" class="hidden bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-bold transition shadow-sm">
+                            <i class="fas fa-trash mr-2"></i>删除工单
+                        </button>
                         <button onclick="printCurrentTicket()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold transition shadow-sm">
                             <i class="fas fa-print mr-2"></i>打印工单
                         </button>
@@ -560,7 +566,7 @@
     <div id="toastContainer" class="fixed top-4 right-4 left-4 sm:left-auto z-[80] space-y-3 pointer-events-none"></div>
 
     <script src="/static/pagination.js?v=20260610"></script>
-    <script src="/static/dashboard.js?v=20260610"></script>
+    <script src="/static/dashboard.js?v=2026062503"></script>
     <script src="/static/watermark.js?v=202606042230"></script>
 </body>
 </html>

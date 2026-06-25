@@ -6,6 +6,7 @@
     <title>工单流程配置 - IT运维工单系统</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="fonts.css">
     <style>
         body {
             background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%);
@@ -68,9 +69,17 @@
                 <i class="fas fa-info-circle mr-3 text-2xl"></i>工单流程配置说明
             </h3>
             <p class="text-sm text-blue-800 mb-3 font-medium">
-                配置工单分类与IT人员的映射关系，实现工单的智能分配：
+                配置工单类型、审批节点、抄送人员与IT人员映射，实现接近OA的工单流转：
             </p>
             <ul class="text-sm text-blue-800 space-y-2 font-medium">
+                <li class="flex items-start">
+                    <i class="fas fa-check-circle mr-3 mt-0.5 text-blue-600"></i>
+                    <span>可以创建新的工单类型，并为每个类型配置多个审批节点</span>
+                </li>
+                <li class="flex items-start">
+                    <i class="fas fa-check-circle mr-3 mt-0.5 text-blue-600"></i>
+                    <span>每个审批节点可以设置审批人、抄送人和节点说明</span>
+                </li>
                 <li class="flex items-start">
                     <i class="fas fa-check-circle mr-3 mt-0.5 text-blue-600"></i>
                     <span>当用户提交工单时，系统会根据工单分类自动分配给对应的IT人员</span>
@@ -88,6 +97,40 @@
                     <span>如果没有配置对应的IT人员，则通知所有IT人员</span>
                 </li>
             </ul>
+        </div>
+
+        <!-- 工单类型管理 -->
+        <div class="bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-100 config-card mb-8">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 mb-8">
+                <div>
+                    <h2 class="text-3xl font-black text-gray-900 flex items-center">
+                        <i class="fas fa-layer-group mr-3 text-indigo-600"></i>工单类型管理
+                    </h2>
+                    <p class="text-sm text-gray-600 mt-2 font-medium">新增类型后，可以继续配置表单、审批节点和自动分配规则</p>
+                </div>
+                <form id="addCategoryForm" class="flex flex-col sm:flex-row gap-3 lg:w-[520px]">
+                    <input type="text" id="newCategoryName" required maxlength="50" class="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500" placeholder="例如：采购申请、权限开通">
+                    <button type="submit" class="btn-hover bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl transition font-bold shadow-lg whitespace-nowrap">
+                        <i class="fas fa-plus mr-2"></i>新增类型
+                    </button>
+                </form>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
+                        <tr>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">ID</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">工单类型</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">审批节点</th>
+                            <th class="px-6 py-5 text-left text-xs font-black text-gray-700 uppercase tracking-wider">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="typeTableBody" class="bg-white divide-y-2 divide-gray-100">
+                        <!-- 工单类型列表 -->
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <div class="bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-100 config-card">
@@ -151,6 +194,39 @@
                 </table>
             </div>
             <div id="categoryPagination" class="pt-6 border-t border-gray-100 mt-4"></div>
+        </div>
+    </div>
+
+    <!-- 审批流程配置模态框 -->
+    <div id="workflowNodeModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col">
+            <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-800 flex items-center">
+                        <i class="fas fa-sitemap mr-2 text-indigo-600"></i>审批节点配置
+                    </h2>
+                    <p class="text-xs text-gray-500 mt-1" id="workflowCategoryName"></p>
+                </div>
+                <div class="flex space-x-3">
+                    <button onclick="addWorkflowNode()" class="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg transition text-sm font-bold shadow-md">
+                        <i class="fas fa-plus mr-2"></i>添加节点
+                    </button>
+                    <button onclick="saveWorkflowNodes()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition text-sm font-bold shadow-md">
+                        <i class="fas fa-save mr-2"></i>保存流程
+                    </button>
+                    <button onclick="closeWorkflowNodeModal()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition text-sm font-bold">
+                        <i class="fas fa-times mr-2"></i>关闭
+                    </button>
+                </div>
+            </div>
+            <div class="p-6 overflow-y-auto">
+                <input type="hidden" id="workflowCategoryId">
+                <div id="workflowNodeList" class="space-y-4"></div>
+                <div id="emptyWorkflowTip" class="border-2 border-dashed border-gray-200 rounded-xl p-10 text-center text-gray-500">
+                    <i class="fas fa-sitemap text-4xl mb-3 text-gray-300"></i>
+                    <p class="font-bold">暂无审批节点</p>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -338,6 +414,8 @@
         let selectedFieldId = null; // 当前选中的字段ID
         let allCategories = []; // 保存所有分类数据
         let allMappings = [];
+        let allUsers = [];
+        let currentWorkflowNodes = [];
         const categoryPagination = createClientPagination({
             containerId: 'categoryPagination',
             pageSize: 10,
@@ -543,6 +621,11 @@
                 addMappingForm.addEventListener('submit', addMapping);
                 console.log('添加配置表单事件已绑定');
             }
+
+            const addCategoryForm = document.getElementById('addCategoryForm');
+            if (addCategoryForm) {
+                addCategoryForm.addEventListener('submit', addCategory);
+            }
             
             // 初始化拖拽事件
             initDragAndDrop();
@@ -556,8 +639,9 @@
             } catch (e) { console.error('加载分类失败', e); }
             
             try {
+                await loadUsersForWorkflow();
                 await loadITUsers();
-                console.log('IT人员加载完成');
+                console.log('用户与IT人员加载完成');
             } catch (e) { console.error('加载IT人员失败', e); }
             
             try {
@@ -848,9 +932,158 @@
                 });
 
                 renderCategories(data.categories);
+                renderTypeRows(data.categories);
             } catch (error) {
                 console.error('加载分类失败:', error);
             }
+        }
+
+        function parseWorkflow(templateJson) {
+            if (!templateJson) return { nodes: [] };
+            try {
+                const parsed = typeof templateJson === 'string' ? JSON.parse(templateJson) : templateJson;
+                return parsed && Array.isArray(parsed.nodes) ? parsed : { nodes: [] };
+            } catch (e) {
+                return { nodes: [] };
+            }
+        }
+
+        function renderTypeRows(categories) {
+            const tbody = document.getElementById('typeTableBody');
+            if (!tbody) return;
+
+            if (categories.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">暂无工单类型</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = categories.map(category => {
+                const workflow = parseWorkflow(category.workflow_template);
+                const nodeCount = workflow.nodes.length;
+                const nodeBadge = nodeCount > 0
+                    ? `<span class="px-2 py-1 text-xs font-semibold rounded-full bg-teal-100 text-teal-800">${nodeCount} 个节点</span>`
+                    : '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">未配置</span>';
+
+                return `
+                    <tr class="hover:bg-gray-50 transition">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${category.id}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <input
+                                id="categoryNameInput_${category.id}"
+                                type="text"
+                                value="${escapeHtml(category.category_name)}"
+                                maxlength="50"
+                                class="w-72 max-w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm font-bold text-indigo-700"
+                            >
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">${nodeBadge}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <button onclick="saveCategoryName(${category.id})" class="text-indigo-600 hover:text-indigo-900 transition mr-4">
+                                <i class="fas fa-save mr-1"></i>保存名称
+                            </button>
+                            <button onclick="openWorkflowNodeModal(${category.id})" class="text-teal-600 hover:text-teal-900 transition mr-4">
+                                <i class="fas fa-sitemap mr-1"></i>配置审批
+                            </button>
+                            <button onclick="deleteCategory(${category.id})" class="text-red-600 hover:text-red-800 transition">
+                                <i class="fas fa-trash mr-1"></i>删除
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        async function addCategory(e) {
+            e.preventDefault();
+            const input = document.getElementById('newCategoryName');
+            const categoryName = input.value.trim();
+            if (!categoryName) {
+                alert('请输入工单类型名称');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/categories?token=${token}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category_name: categoryName })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    input.value = '';
+                    alert('工单类型创建成功！');
+                    await loadCategories();
+                } else {
+                    alert(data.detail || '创建失败');
+                }
+            } catch (error) {
+                console.error('创建工单类型失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+
+        async function saveCategoryName(categoryId) {
+            const input = document.getElementById(`categoryNameInput_${categoryId}`);
+            const categoryName = input.value.trim();
+            if (!categoryName) {
+                alert('工单类型名称不能为空');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/categories/${categoryId}?token=${token}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category_name: categoryName })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    alert('名称保存成功！');
+                    await loadCategories();
+                } else {
+                    alert(data.detail || '保存失败');
+                }
+            } catch (error) {
+                console.error('保存工单类型名称失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+
+        async function deleteCategory(categoryId) {
+            const category = allCategories.find(item => item.id === categoryId);
+            if (!category || !confirm(`确定要删除工单类型“${category.category_name}”吗？已有工单使用的类型不能删除。`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/categories/${categoryId}?token=${token}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (response.ok) {
+                    alert('工单类型删除成功！');
+                    await loadCategories();
+                    await loadMappings();
+                } else {
+                    alert(data.detail || '删除失败');
+                }
+            } catch (error) {
+                console.error('删除工单类型失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+
+        async function loadUsersForWorkflow() {
+            const response = await fetch(`/api/users?token=${token}`);
+            const data = await response.json();
+            allUsers = (data.users || []).filter(user => user.status !== 'inactive');
         }
 
         function renderCategories(categories, resetPage = true) {
@@ -890,13 +1123,10 @@
 
         async function loadITUsers() {
             try {
-                const response = await fetch(`/api/users?token=${token}`);
-                const data = await response.json();
-                
                 const select = document.getElementById('itUserId');
                 select.innerHTML = '<option value="">请选择IT人员</option>';
                 
-                const itUsers = data.users.filter(user => user.role_type === 'it');
+                const itUsers = allUsers.filter(user => user.role_type === 'it');
                 
                 itUsers.forEach(user => {
                     const option = document.createElement('option');
@@ -908,6 +1138,194 @@
                 console.error('加载IT人员失败:', error);
             }
         }
+
+        function openWorkflowNodeModal(categoryId) {
+            const category = allCategories.find(item => item.id === categoryId);
+            if (!category) return;
+
+            const workflow = parseWorkflow(category.workflow_template);
+            currentWorkflowNodes = workflow.nodes.map((node, index) => ({
+                id: node.id || `node_${Date.now()}_${index}`,
+                name: node.name || `审批节点${index + 1}`,
+                approver_ids: Array.isArray(node.approver_ids) ? node.approver_ids.map(Number) : [],
+                cc_ids: Array.isArray(node.cc_ids) ? node.cc_ids.map(Number) : [],
+                comment: node.comment || '',
+                order: index + 1
+            }));
+
+            document.getElementById('workflowCategoryId').value = categoryId;
+            document.getElementById('workflowCategoryName').textContent = `工单类型：${category.category_name}`;
+            renderWorkflowNodes();
+            document.getElementById('workflowNodeModal').classList.remove('hidden');
+        }
+
+        function closeWorkflowNodeModal() {
+            document.getElementById('workflowNodeModal').classList.add('hidden');
+            currentWorkflowNodes = [];
+        }
+
+        function addWorkflowNode() {
+            currentWorkflowNodes.push({
+                id: `node_${Date.now()}`,
+                name: `审批节点${currentWorkflowNodes.length + 1}`,
+                approver_ids: [],
+                cc_ids: [],
+                comment: '',
+                order: currentWorkflowNodes.length + 1
+            });
+            renderWorkflowNodes();
+        }
+
+        function deleteWorkflowNode(index) {
+            if (!confirm('确定要删除这个审批节点吗？')) return;
+            currentWorkflowNodes.splice(index, 1);
+            currentWorkflowNodes = currentWorkflowNodes.map((node, nodeIndex) => ({ ...node, order: nodeIndex + 1 }));
+            renderWorkflowNodes();
+        }
+
+        function moveWorkflowNode(index, direction) {
+            const targetIndex = index + direction;
+            if (targetIndex < 0 || targetIndex >= currentWorkflowNodes.length) return;
+            const temp = currentWorkflowNodes[index];
+            currentWorkflowNodes[index] = currentWorkflowNodes[targetIndex];
+            currentWorkflowNodes[targetIndex] = temp;
+            currentWorkflowNodes = currentWorkflowNodes.map((node, nodeIndex) => ({ ...node, order: nodeIndex + 1 }));
+            renderWorkflowNodes();
+        }
+
+        function buildUserOptions(selectedIds) {
+            const selectedSet = new Set((selectedIds || []).map(Number));
+            return allUsers.map(user => `
+                <option value="${user.id}" ${selectedSet.has(Number(user.id)) ? 'selected' : ''}>
+                    ${escapeHtml(user.real_name)} (${escapeHtml(user.username)} / ${escapeHtml(user.role_name || '')})
+                </option>
+            `).join('');
+        }
+
+        function renderWorkflowNodes() {
+            const list = document.getElementById('workflowNodeList');
+            const emptyTip = document.getElementById('emptyWorkflowTip');
+
+            if (currentWorkflowNodes.length === 0) {
+                list.innerHTML = '';
+                emptyTip.classList.remove('hidden');
+                return;
+            }
+
+            emptyTip.classList.add('hidden');
+            list.innerHTML = currentWorkflowNodes.map((node, index) => `
+                <div class="border-2 border-gray-100 rounded-xl p-5 bg-gray-50">
+                    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black">${index + 1}</div>
+                            <input
+                                type="text"
+                                value="${escapeHtml(node.name)}"
+                                maxlength="50"
+                                oninput="updateWorkflowNode(${index}, 'name', this.value)"
+                                class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-bold text-gray-900"
+                            >
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="moveWorkflowNode(${index}, -1)" class="px-3 py-2 rounded-lg bg-white text-gray-600 border hover:bg-gray-100" title="上移">
+                                <i class="fas fa-arrow-up"></i>
+                            </button>
+                            <button type="button" onclick="moveWorkflowNode(${index}, 1)" class="px-3 py-2 rounded-lg bg-white text-gray-600 border hover:bg-gray-100" title="下移">
+                                <i class="fas fa-arrow-down"></i>
+                            </button>
+                            <button type="button" onclick="deleteWorkflowNode(${index})" class="px-3 py-2 rounded-lg bg-red-50 text-red-600 border border-red-100 hover:bg-red-100" title="删除">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">审批人 *</label>
+                            <select multiple size="6" onchange="updateWorkflowNodeUsers(${index}, 'approver_ids', this)" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white">
+                                ${buildUserOptions(node.approver_ids)}
+                            </select>
+                            <p class="text-xs text-gray-500 mt-1">按住 Ctrl / Command 可多选</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">抄送人</label>
+                            <select multiple size="6" onchange="updateWorkflowNodeUsers(${index}, 'cc_ids', this)" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white">
+                                ${buildUserOptions(node.cc_ids)}
+                            </select>
+                            <p class="text-xs text-gray-500 mt-1">抄送人会在工单创建时收到提醒</p>
+                        </div>
+                    </div>
+                    <div class="mt-5">
+                        <label class="block text-sm font-bold text-gray-700 mb-2">节点说明 / 评论</label>
+                        <textarea rows="3" maxlength="500" oninput="updateWorkflowNode(${index}, 'comment', this.value)" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 resize-none" placeholder="例如：请确认预算、风险或处理意见">${escapeHtml(node.comment || '')}</textarea>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateWorkflowNode(index, field, value) {
+            if (!currentWorkflowNodes[index]) return;
+            currentWorkflowNodes[index][field] = value;
+        }
+
+        function updateWorkflowNodeUsers(index, field, select) {
+            if (!currentWorkflowNodes[index]) return;
+            currentWorkflowNodes[index][field] = Array.from(select.selectedOptions).map(option => Number(option.value));
+        }
+
+        async function saveWorkflowNodes() {
+            const categoryId = document.getElementById('workflowCategoryId').value;
+            const nodes = currentWorkflowNodes.map((node, index) => ({
+                id: node.id,
+                name: (node.name || '').trim(),
+                approver_ids: node.approver_ids || [],
+                cc_ids: node.cc_ids || [],
+                comment: (node.comment || '').trim(),
+                order: index + 1
+            }));
+
+            for (const node of nodes) {
+                if (!node.name) {
+                    alert('节点名称不能为空');
+                    return;
+                }
+                if (!node.approver_ids.length) {
+                    alert(`节点“${node.name}”至少需要选择一个审批人`);
+                    return;
+                }
+            }
+
+            try {
+                const response = await fetch(`/api/categories/${categoryId}/workflow?token=${token}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        workflow_template: nodes.length ? JSON.stringify({ nodes }) : null
+                    })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    alert('审批流程保存成功！');
+                    closeWorkflowNodeModal();
+                    await loadCategories();
+                } else {
+                    alert(data.detail || '保存失败');
+                }
+            } catch (error) {
+                console.error('保存审批流程失败:', error);
+                alert('网络错误，请稍后重试');
+            }
+        }
+
+        window.openWorkflowNodeModal = openWorkflowNodeModal;
+        window.closeWorkflowNodeModal = closeWorkflowNodeModal;
+        window.addWorkflowNode = addWorkflowNode;
+        window.deleteWorkflowNode = deleteWorkflowNode;
+        window.moveWorkflowNode = moveWorkflowNode;
+        window.updateWorkflowNode = updateWorkflowNode;
+        window.updateWorkflowNodeUsers = updateWorkflowNodeUsers;
+        window.saveWorkflowNodes = saveWorkflowNodes;
+        window.saveCategoryName = saveCategoryName;
+        window.deleteCategory = deleteCategory;
 
         async function loadMappings() {
             try {

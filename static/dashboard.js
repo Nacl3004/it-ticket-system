@@ -122,7 +122,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (workflowConfigBtn) {
             workflowConfigBtn.classList.remove('hidden');
             workflowConfigBtn.addEventListener('click', () => {
-                window.location.href = '/static/workflow-config.html';
+                window.location.href = '/static/workflow-config.html?v=2026062502';
             });
         }
         const ticketNumberConfigBtn = document.getElementById('ticketNumberConfigBtn');
@@ -841,17 +841,7 @@ async function loadTickets(status = '') {
         const response = await fetch(url);
         const data = await response.json();
         
-        // 根据用户角色过滤工单
-        if (currentUser.role_type === 'it') {
-            // IT运维只显示分配给自己的工单
-            allTickets = data.tickets.filter(ticket => ticket.assigned_to === currentUser.id);
-        } else if (['super_admin', 'admin', 'hr'].includes(currentUser.role_type)) {
-            // 管理员和HR可以看到所有工单
-            allTickets = data.tickets;
-        } else {
-            // 普通用户只看到自己提交的工单
-            allTickets = data.tickets.filter(ticket => ticket.submitter_id === currentUser.id);
-        }
+        allTickets = data.tickets || [];
         
         renderTickets(allTickets);
     } catch (error) {
@@ -880,15 +870,15 @@ async function loadPendingTickets() {
         const response = await fetch(`/api/tickets?token=${token}`);
         const data = await response.json();
         
-        // 待处理工单：除了completed和closed之外的所有状态
+        // 待处理工单：除了已完成、已结单、已驳回之外的所有状态
         let pendingTickets = data.tickets.filter(ticket => 
-            ticket.status !== 'completed' && ticket.status !== 'closed'
+            ticket.status !== 'completed' && ticket.status !== 'closed' && ticket.status !== 'rejected'
         );
         
         // 根据用户角色过滤
         if (currentUser.role_type === 'it') {
             // IT运维只显示分配给自己的待处理工单
-            pendingTickets = pendingTickets.filter(ticket => ticket.assigned_to === currentUser.id);
+            pendingTickets = pendingTickets.filter(ticket => ticket.assigned_to === currentUser.id || ticket.status === 'pending' || ticket.can_approve_workflow);
         }
         // 管理员和超级管理员可以看到所有待处理工单
         
@@ -911,8 +901,8 @@ async function loadMySubmittedTickets() {
         const response = await fetch(`/api/tickets?token=${token}`);
         const data = await response.json();
         
-        // 筛选出当前用户提交的工单
-        const myTickets = data.tickets.filter(ticket => ticket.submitter_id === currentUser.id);
+        // 后端已经返回当前用户提交、审批、抄送相关的工单
+        const myTickets = data.tickets || [];
         allTickets = myTickets;
         renderTickets(myTickets);
     } catch (error) {
@@ -937,13 +927,21 @@ function renderTickets(tickets, resetPage = true) {
         const statusBadge = getStatusBadge(ticket.status);
         const priorityBadge = getPriorityBadge(ticket.priority);
         const actions = getTicketActions(ticket);
+        const workflowBadge = ticket.can_approve_workflow
+            ? '<span class="inline-flex items-center mt-2 px-2 py-1 text-xs font-bold rounded-full bg-cyan-100 text-cyan-800"><i class="fas fa-user-check mr-1"></i>待我审批</span>'
+            : ticket.workflow_current_node_name && ticket.status === 'pending_approval'
+                ? `<span class="inline-flex items-center mt-2 px-2 py-1 text-xs font-bold rounded-full bg-gray-100 text-gray-700"><i class="fas fa-sitemap mr-1"></i>${ticket.workflow_current_node_name}</span>`
+                : '';
         
         return `
             <tr class="hover:bg-gray-50 transition">
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <button type="button" onclick="viewTicketDetail(${ticket.id})" class="text-indigo-600 hover:text-indigo-900 hover:underline font-bold" title="查看工单详情">${ticket.ticket_no}</button>
                 </td>
-                <td class="px-6 py-4 text-sm text-gray-900">${ticket.title}</td>
+                <td class="px-6 py-4 text-sm text-gray-900">
+                    <button type="button" onclick="viewTicketDetail(${ticket.id})" class="font-bold text-gray-900 hover:text-indigo-700 text-left">${ticket.title}</button>
+                    <div>${workflowBadge}</div>
+                </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${ticket.category_name}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${ticket.submitter_real_name}</td>
                 <td class="px-6 py-4 whitespace-nowrap">${statusBadge}</td>
@@ -964,6 +962,8 @@ function renderTickets(tickets, resetPage = true) {
 function getStatusBadge(status) {
     const badges = {
         'pending': '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">待处理</span>',
+        'pending_approval': '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-cyan-100 text-cyan-800">待审批</span>',
+        'rejected': '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">已驳回</span>',
         'claimed': '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">已认领</span>',
         'processing': '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">处理中</span>',
         'completed': '<span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">已完成</span>',
@@ -983,9 +983,147 @@ function getPriorityBadge(priority) {
     return badges[priority] || priority;
 }
 
+function parseWorkflowSnapshot(ticket) {
+    if (ticket.workflow && Array.isArray(ticket.workflow.nodes)) {
+        return ticket.workflow;
+    }
+    if (!ticket.workflow_snapshot) return null;
+    try {
+        const workflow = JSON.parse(ticket.workflow_snapshot);
+        return workflow && Array.isArray(workflow.nodes) ? workflow : null;
+    } catch (error) {
+        return null;
+    }
+}
+
+function getCurrentWorkflowNode(workflow) {
+    if (!workflow || !Array.isArray(workflow.nodes) || workflow.nodes.length === 0) return null;
+    const index = Number.isInteger(workflow.current_index) ? workflow.current_index : workflow.nodes.findIndex(node => node.status === 'pending');
+    return workflow.nodes[index >= 0 ? index : 0] || null;
+}
+
+function isCurrentWorkflowApprover(ticket) {
+    if (ticket.can_approve_workflow) return true;
+    if (ticket.status !== 'pending_approval') return false;
+    const node = getCurrentWorkflowNode(parseWorkflowSnapshot(ticket));
+    return !!node && Array.isArray(node.approver_ids) && node.approver_ids.map(Number).includes(Number(currentUser.id));
+}
+
+function canDeleteTicket(ticket) {
+    if (!currentUser || !ticket) return false;
+    if (['super_admin', 'admin'].includes(currentUser.role_type)) return true;
+    if (currentUser.role_type !== 'it') return false;
+    return ticket.submitter_id === currentUser.id ||
+        ticket.assigned_to === currentUser.id ||
+        ticket.workflow_relation === 'current_approver' ||
+        ticket.workflow_relation === 'participant' ||
+        isCurrentWorkflowApprover(ticket);
+}
+
+function getWorkflowNodeStatus(node) {
+    const statusMap = {
+        pending: { text: '待审批', badge: 'bg-cyan-100 text-cyan-800', dot: 'bg-cyan-500' },
+        waiting: { text: '待流转', badge: 'bg-gray-100 text-gray-700', dot: 'bg-gray-300' },
+        approved: { text: '已通过', badge: 'bg-green-100 text-green-800', dot: 'bg-green-500' },
+        rejected: { text: '已驳回', badge: 'bg-red-100 text-red-800', dot: 'bg-red-500' }
+    };
+    return statusMap[node.status || 'waiting'] || statusMap.waiting;
+}
+
+function renderWorkflowPanel(ticket) {
+    const workflow = parseWorkflowSnapshot(ticket);
+    if (!workflow || !Array.isArray(workflow.nodes) || workflow.nodes.length === 0) return '';
+
+    const canApprove = isCurrentWorkflowApprover(ticket);
+    const currentNode = getCurrentWorkflowNode(workflow);
+    const doneCount = workflow.nodes.filter(node => node.status === 'approved').length;
+    const rejectedCount = workflow.nodes.filter(node => node.status === 'rejected').length;
+    const progressText = rejectedCount > 0 ? '已驳回' : `${doneCount}/${workflow.nodes.length} 已通过`;
+    const currentApprovers = currentNode
+        ? ((currentNode.approvers || []).map(user => user.real_name).join('、') || (currentNode.approver_ids || []).join('、') || '未配置')
+        : '-';
+    const actionPanel = canApprove && currentNode ? `
+        <div class="mt-5 border-2 border-cyan-200 bg-cyan-50 rounded-2xl p-5">
+            <div class="flex items-start justify-between gap-4 mb-4">
+                <div>
+                    <p class="text-xs font-black text-cyan-700 uppercase tracking-wider">当前待办</p>
+                    <h4 class="text-lg font-black text-gray-900 mt-1">${currentNode.name || '审批节点'}</h4>
+                    <p class="text-sm text-gray-600 mt-1">请确认信息无误后审批，驳回会结束当前流程。</p>
+                </div>
+                <span class="shrink-0 px-3 py-1 rounded-full bg-white text-cyan-700 text-xs font-black border border-cyan-200">待我审批</span>
+            </div>
+            <label class="block text-sm font-bold text-gray-700 mb-2">审批意见</label>
+            <textarea id="workflowApprovalComment" rows="3" class="w-full px-4 py-3 border border-cyan-200 rounded-xl focus:ring-2 focus:ring-cyan-500 resize-none bg-white" placeholder="可填写审批意见，例如：同意、请补充说明、预算不通过等"></textarea>
+            <div class="flex flex-col sm:flex-row gap-3 mt-4">
+                <button onclick="submitWorkflowAction(${ticket.id}, 'approve')" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold shadow-md transition">
+                    <i class="fas fa-check mr-2"></i>审批通过
+                </button>
+                <button onclick="submitWorkflowAction(${ticket.id}, 'reject')" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold shadow-md transition">
+                    <i class="fas fa-times mr-2"></i>驳回
+                </button>
+            </div>
+        </div>
+    ` : '';
+
+    return `
+        <div class="bg-white border border-cyan-100 rounded-2xl p-5 shadow-sm">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-5">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-sitemap mr-2 text-cyan-600"></i>审批流程
+                    </h3>
+                    <p class="text-sm text-gray-500 mt-1">当前节点：${ticket.status === 'pending_approval' && currentNode ? currentNode.name : progressText}</p>
+                </div>
+                <div class="text-left sm:text-right">
+                    <span class="inline-flex items-center px-3 py-1 rounded-full bg-cyan-50 text-cyan-700 text-xs font-black border border-cyan-100">${progressText}</span>
+                    ${ticket.status === 'pending_approval' ? `<p class="text-xs text-gray-500 mt-2">当前审批人：${currentApprovers}</p>` : ''}
+                </div>
+            </div>
+            <div class="space-y-3">
+                ${workflow.nodes.map((node, index) => {
+                    const status = getWorkflowNodeStatus(node);
+                    const approvers = (node.approvers || []).map(user => user.real_name).join('、') || (node.approver_ids || []).join('、') || '未配置';
+                    const ccUsers = (node.cc_users || []).map(user => user.real_name).join('、') || (node.cc_ids || []).join('、') || '无';
+                    const isCurrent = ticket.status === 'pending_approval' && currentNode && currentNode.id === node.id;
+                    return `
+                        <div class="${isCurrent ? 'border-cyan-300 bg-cyan-50' : 'border-gray-100 bg-gray-50'} border rounded-xl p-4">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                <div class="flex items-center gap-3">
+                                    <span class="w-7 h-7 rounded-full ${status.dot} text-white text-xs font-black flex items-center justify-center">${index + 1}</span>
+                                    <p class="font-bold text-gray-900">${node.name || `审批节点${index + 1}`}</p>
+                                </div>
+                                <span class="px-2 py-1 text-xs font-bold rounded-full ${status.badge}">${status.text}</span>
+                            </div>
+                            <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                <p class="text-gray-600"><span class="font-bold text-gray-800">审批人：</span>${approvers}</p>
+                                <p class="text-gray-600"><span class="font-bold text-gray-800">抄送：</span>${ccUsers}</p>
+                            </div>
+                            ${node.comment ? `<p class="mt-2 text-sm text-gray-600"><span class="font-bold text-gray-800">节点说明：</span>${node.comment}</p>` : ''}
+                            ${node.approved_by_name ? `
+                                <div class="mt-3 rounded-lg bg-white border border-gray-100 p-3 text-sm">
+                                    <p class="font-bold text-gray-800">${node.approved_by_name} ${status.text}</p>
+                                    <p class="text-xs text-gray-500 mt-1">${formatDateTime(node.approved_at)}</p>
+                                    ${node.approval_comment ? `<p class="text-gray-600 mt-2 whitespace-pre-wrap">${node.approval_comment}</p>` : ''}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+            ${actionPanel}
+        </div>
+    `;
+}
+
 // 获取工单操作按钮
 function getTicketActions(ticket) {
     let actions = '';
+
+    if (isCurrentWorkflowApprover(ticket)) {
+        actions += `<button onclick="viewTicketDetail(${ticket.id})" class="inline-flex items-center px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-bold mr-2 shadow-sm">
+            <i class="fas fa-user-check mr-1"></i> 去审批
+        </button>`;
+    }
     
     // IT人员可以认领待处理的工单
     if (currentUser.role_type === 'it' && ticket.status === 'pending') {
@@ -1012,6 +1150,12 @@ function getTicketActions(ticket) {
     if (ticket.submitter_id === currentUser.id && ticket.status === 'completed' && !ticket.satisfaction) {
         actions += `<button onclick="viewTicketDetail(${ticket.id})" class="text-pink-600 hover:text-pink-900">
             <i class="fas fa-star"></i> 评价
+        </button>`;
+    }
+
+    if (canDeleteTicket(ticket)) {
+        actions += `<button onclick="deleteTicket(${ticket.id})" class="text-red-600 hover:text-red-800 ml-2">
+            <i class="fas fa-trash"></i> 删除
         </button>`;
     }
     
@@ -1139,6 +1283,10 @@ async function viewTicketDetail(ticketId) {
         if (response.ok) {
             currentTicketDetail = data.ticket;
             renderTicketDetail(data.ticket);
+            const deleteBtn = document.getElementById('deleteTicketDetailBtn');
+            if (deleteBtn) {
+                deleteBtn.classList.toggle('hidden', !canDeleteTicket(data.ticket));
+            }
             document.getElementById('ticketDetailModal').classList.remove('hidden');
         }
     } catch (error) {
@@ -1176,6 +1324,8 @@ function renderTicketDetail(ticket) {
     
     // 按时间正序排序时间线
     timelineEvents.sort((a, b) => new Date(a.time) - new Date(b.time));
+    const workflowHtml = renderWorkflowPanel(ticket);
+    const visibleLogs = (ticket.logs || []).filter(log => !['发起审批', '审批流程'].includes(log.action));
 
     // 构建自定义字段HTML
     let customFieldsHtml = '';
@@ -1360,6 +1510,8 @@ function renderTicketDetail(ticket) {
                     </div>
                     
                     ${customFieldsHtml}
+
+                    ${workflowHtml}
                     
                     ${ticket.solution ? `
                         <div>
@@ -1404,7 +1556,7 @@ function renderTicketDetail(ticket) {
                             <i class="fas fa-clipboard-list mr-2 text-indigo-600"></i>操作日志
                         </h3>
                         <div class="relative space-y-4 max-h-96 overflow-y-auto pr-2 soft-scrollbar">
-                            ${ticket.logs.sort((a, b) => {
+                            ${visibleLogs.sort((a, b) => {
                                 // 先按时间倒序排序（最新的在上面）
                                 const timeDiff = new Date(b.created_at) - new Date(a.created_at);
                                 if (timeDiff !== 0) return timeDiff;
@@ -1422,7 +1574,7 @@ function renderTicketDetail(ticket) {
                                         </div>
                                         <p class="text-sm ${index === 0 ? 'text-gray-800 font-medium' : 'text-gray-600'} leading-relaxed">${log.content}</p>
                                 </div>
-                            `).join('')}
+                            `).join('') || '<p class="text-sm text-gray-500 text-center py-6">暂无操作日志</p>'}
                         </div>
                     </div>
                 </div>
@@ -1486,9 +1638,53 @@ async function rateTicket(e, ticketId) {
     }
 }
 
+async function submitWorkflowAction(ticketId, action) {
+    const commentEl = document.getElementById('workflowApprovalComment');
+    const comment = commentEl ? commentEl.value.trim() : '';
+    const actionText = action === 'approve' ? '通过' : '驳回';
+
+    openActionModal({
+        title: `确认审批${actionText}`,
+        description: action === 'approve' ? '通过后工单会流转到下一审批节点，全部通过后进入IT处理。' : '驳回后工单会结束审批并通知提交人。',
+        body: `<p class="text-sm text-gray-600 leading-relaxed">确认要${actionText}这个工单吗？</p>${comment ? `<p class="mt-3 text-sm text-gray-700 bg-gray-50 border rounded-xl p-3 whitespace-pre-wrap">${comment}</p>` : ''}`,
+        confirmText: `审批${actionText}`,
+        confirmClass: action === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700',
+        onConfirm: async () => {
+            setActionLoading(true, '提交中...');
+            try {
+                const response = await fetch(`/api/tickets/${ticketId}/workflow?token=${token}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action, comment })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    document.getElementById('actionModal').classList.add('hidden');
+                    actionModalHandler = null;
+                    showToast(data.message || `审批${actionText}成功`);
+                    await loadStatistics();
+                    await loadTickets();
+                    await viewTicketDetail(ticketId);
+                } else {
+                    showToast(data.detail || '审批失败', 'error');
+                    setActionLoading(false);
+                }
+            } catch (error) {
+                console.error('审批失败:', error);
+                showToast('网络错误，请稍后重试', 'error');
+                setActionLoading(false);
+            }
+        }
+    });
+}
+
 // 关闭工单详情模态框
 function closeTicketDetailModal() {
     document.getElementById('ticketDetailModal').classList.add('hidden');
+    const deleteBtn = document.getElementById('deleteTicketDetailBtn');
+    if (deleteBtn) {
+        deleteBtn.classList.add('hidden');
+    }
 }
 
 function escapePrintText(value) {
@@ -1525,7 +1721,7 @@ function printCurrentTicket() {
             <style>
                 @page { size: A4; margin: 14mm; }
                 * { box-sizing: border-box; }
-                body { margin: 0; color: #1f2937; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; background: white; }
+                body { margin: 0; color: #1f2937; font-family: "PingFang SC", "PingFang TC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: white; }
                 .print-header { border-bottom: 2px solid #4f46e5; padding-bottom: 14px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; }
                 .print-header h1 { margin: 0; font-size: 24px; }
                 .print-header p { margin: 6px 0 0; color: #6b7280; font-size: 12px; }
@@ -1709,6 +1905,42 @@ async function closeTicket(ticketId) {
             }
         }
     });
+}
+
+async function deleteTicket(ticketId) {
+    openActionModal({
+        title: '删除工单',
+        description: '删除后该工单、通知和操作日志都会移除。',
+        body: '<p class="text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl p-4 leading-relaxed">确认要删除这个工单吗？此操作不可恢复。</p>',
+        confirmText: '确认删除',
+        confirmClass: 'bg-red-600 hover:bg-red-700',
+        onConfirm: async () => {
+            setActionLoading(true, '删除中...');
+            try {
+                const response = await fetch(`/api/tickets/${ticketId}?token=${token}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (response.ok) {
+                    closeTicketDetailModal();
+                    closeActionAfterSuccess(data.message || '工单已删除');
+                } else {
+                    showToast(data.detail || '删除失败', 'error');
+                    setActionLoading(false);
+                }
+            } catch (error) {
+                console.error('删除工单失败:', error);
+                showToast('网络错误，请稍后重试', 'error');
+                setActionLoading(false);
+            }
+        }
+    });
+}
+
+function deleteTicketFromDetail() {
+    if (!currentTicketDetail) {
+        showToast('工单详情尚未加载完成', 'warning');
+        return;
+    }
+    deleteTicket(currentTicketDetail.id);
 }
 
 function closeActionAfterSuccess(message) {

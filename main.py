@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 import pymysql
 import os
 from dotenv import load_dotenv
@@ -196,7 +196,8 @@ def check_and_migrate_db():
             CREATE TABLE IF NOT EXISTS ticket_categories (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 category_name VARCHAR(50) NOT NULL,
-                form_template TEXT DEFAULT NULL COMMENT '自定义表单模板(JSON)'
+                form_template TEXT DEFAULT NULL COMMENT '自定义表单模板(JSON)',
+                workflow_template TEXT DEFAULT NULL COMMENT '审批流程节点配置(JSON)'
             )
         """)
         
@@ -221,6 +222,7 @@ def check_and_migrate_db():
                 submitter_name VARCHAR(50),
                 priority VARCHAR(20) DEFAULT 'medium',
                 extra_data TEXT DEFAULT NULL COMMENT '自定义表单数据(JSON)',
+                workflow_snapshot TEXT DEFAULT NULL COMMENT '创建工单时的审批流程快照(JSON)',
                 status VARCHAR(20) DEFAULT 'pending',
                 assigned_to INT,
                 claimed_at TIMESTAMP NULL,
@@ -427,6 +429,18 @@ def check_and_migrate_db():
             print("Adding extra_data column to tickets...")
             cursor.execute("ALTER TABLE tickets ADD COLUMN extra_data TEXT DEFAULT NULL COMMENT '自定义表单数据(JSON)'")
 
+        # 检查 workflow_template 字段
+        cursor.execute("SHOW COLUMNS FROM ticket_categories LIKE 'workflow_template'")
+        if not cursor.fetchone():
+            print("Adding workflow_template column to ticket_categories...")
+            cursor.execute("ALTER TABLE ticket_categories ADD COLUMN workflow_template TEXT DEFAULT NULL COMMENT '审批流程节点配置(JSON)'")
+
+        # 检查 workflow_snapshot 字段
+        cursor.execute("SHOW COLUMNS FROM tickets LIKE 'workflow_snapshot'")
+        if not cursor.fetchone():
+            print("Adding workflow_snapshot column to tickets...")
+            cursor.execute("ALTER TABLE tickets ADD COLUMN workflow_snapshot TEXT DEFAULT NULL COMMENT '创建工单时的审批流程快照(JSON)'")
+
         # 检查 webhook scope 字段
         cursor.execute("SHOW COLUMNS FROM webhook_configs LIKE 'scope'")
         if not cursor.fetchone():
@@ -466,7 +480,21 @@ class TicketCreate(BaseModel):
     extra_data: Optional[str] = None
 
 class CategoryUpdate(BaseModel):
+    category_name: Optional[str] = None
     form_template: Optional[str] = None
+    workflow_template: Optional[str] = None
+
+class CategoryCreate(BaseModel):
+    category_name: str
+    form_template: Optional[str] = None
+    workflow_template: Optional[str] = None
+
+class CategoryWorkflowUpdate(BaseModel):
+    workflow_template: Optional[str] = None
+
+class WorkflowAction(BaseModel):
+    action: str
+    comment: Optional[str] = None
 
 class TicketRate(BaseModel):
     satisfaction: int
@@ -651,6 +679,262 @@ def require_admin(payload: dict, conn):
     if not user or user['role_type'] not in ['super_admin', 'admin']:
         raise HTTPException(status_code=403, detail="只有管理员可以操作")
     return user
+
+def normalize_id_list(value: Any) -> List[int]:
+    if not isinstance(value, list):
+        return []
+
+    ids = []
+    seen = set()
+    for item in value:
+        try:
+            user_id = int(item)
+        except (TypeError, ValueError):
+            continue
+        if user_id > 0 and user_id not in seen:
+            seen.add(user_id)
+            ids.append(user_id)
+    return ids
+
+def validate_workflow_template(template_value: Optional[str], conn) -> Optional[str]:
+    if not template_value:
+        return None
+
+    try:
+        template = json.loads(template_value) if isinstance(template_value, str) else template_value
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="流程配置不是有效的JSON")
+
+    nodes = template.get("nodes") if isinstance(template, dict) else None
+    if not isinstance(nodes, list):
+        raise HTTPException(status_code=400, detail="流程配置必须包含nodes数组")
+
+    normalized_nodes = []
+    referenced_user_ids = set()
+    for index, node in enumerate(nodes, start=1):
+        if not isinstance(node, dict):
+            raise HTTPException(status_code=400, detail=f"第{index}个节点格式不正确")
+
+        name = str(node.get("name") or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail=f"第{index}个节点名称不能为空")
+
+        approver_ids = normalize_id_list(node.get("approver_ids"))
+        cc_ids = normalize_id_list(node.get("cc_ids"))
+        if not approver_ids:
+            raise HTTPException(status_code=400, detail=f"节点“{name}”至少需要一个审批人")
+
+        referenced_user_ids.update(approver_ids)
+        referenced_user_ids.update(cc_ids)
+        normalized_nodes.append({
+            "id": str(node.get("id") or f"node_{index}"),
+            "name": name[:50],
+            "approver_ids": approver_ids,
+            "cc_ids": cc_ids,
+            "comment": str(node.get("comment") or "").strip()[:500],
+            "order": index
+        })
+
+    if referenced_user_ids:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        placeholders = ",".join(["%s"] * len(referenced_user_ids))
+        cursor.execute(f"SELECT id FROM users WHERE status = 'active' AND id IN ({placeholders})", tuple(referenced_user_ids))
+        active_user_ids = {row['id'] for row in cursor.fetchall()}
+        invalid_user_ids = sorted(referenced_user_ids - active_user_ids)
+        if invalid_user_ids:
+            raise HTTPException(status_code=400, detail=f"流程中包含无效或停用用户：{', '.join(map(str, invalid_user_ids))}")
+
+    return json.dumps({"nodes": normalized_nodes}, ensure_ascii=False)
+
+def load_workflow_people(cursor, workflow_template: Optional[str]) -> Dict[str, Any]:
+    if not workflow_template:
+        return {"nodes": [], "user_ids": []}
+
+    try:
+        workflow = json.loads(workflow_template)
+    except (TypeError, json.JSONDecodeError):
+        return {"nodes": [], "user_ids": []}
+
+    nodes = workflow.get("nodes") if isinstance(workflow, dict) else []
+    if not isinstance(nodes, list):
+        return {"nodes": [], "user_ids": []}
+
+    all_user_ids = []
+    seen = set()
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        for user_id in normalize_id_list(node.get("approver_ids")) + normalize_id_list(node.get("cc_ids")):
+            if user_id not in seen:
+                seen.add(user_id)
+                all_user_ids.append(user_id)
+
+    user_map = {}
+    if all_user_ids:
+        placeholders = ",".join(["%s"] * len(all_user_ids))
+        cursor.execute(f"SELECT id, real_name, username FROM users WHERE id IN ({placeholders})", tuple(all_user_ids))
+        user_map = {row['id']: row for row in cursor.fetchall()}
+
+    hydrated_nodes = []
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        approver_ids = normalize_id_list(node.get("approver_ids"))
+        cc_ids = normalize_id_list(node.get("cc_ids"))
+        hydrated_nodes.append({
+            **node,
+            "approvers": [user_map[user_id] for user_id in approver_ids if user_id in user_map],
+            "cc_users": [user_map[user_id] for user_id in cc_ids if user_id in user_map]
+        })
+
+    return {"nodes": hydrated_nodes, "user_ids": all_user_ids}
+
+def build_workflow_snapshot(nodes: List[Dict[str, Any]]) -> Optional[str]:
+    if not nodes:
+        return None
+
+    snapshot_nodes = []
+    for index, node in enumerate(nodes):
+        snapshot_nodes.append({
+            **node,
+            "status": "pending" if index == 0 else "waiting",
+            "approved_by": None,
+            "approved_by_name": None,
+            "approved_at": None,
+            "approval_comment": None
+        })
+    return json.dumps({"current_index": 0, "status": "pending", "nodes": snapshot_nodes}, ensure_ascii=False)
+
+def parse_workflow_snapshot(snapshot: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not snapshot:
+        return None
+    try:
+        workflow = json.loads(snapshot)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(workflow, dict) or not isinstance(workflow.get("nodes"), list):
+        return None
+
+    nodes = workflow["nodes"]
+    current_index = workflow.get("current_index")
+    if current_index is None:
+        current_index = 0
+        for idx, node in enumerate(nodes):
+            if node.get("status") in ["pending", None]:
+                current_index = idx
+                break
+    workflow["current_index"] = current_index
+    workflow["status"] = workflow.get("status") or "pending"
+    return workflow
+
+def workflow_user_ids(workflow: Optional[Dict[str, Any]]) -> set:
+    if not workflow:
+        return set()
+    user_ids = set()
+    for node in workflow.get("nodes", []):
+        if not isinstance(node, dict):
+            continue
+        user_ids.update(normalize_id_list(node.get("approver_ids")))
+        user_ids.update(normalize_id_list(node.get("cc_ids")))
+    return user_ids
+
+def apply_ticket_workflow_fields(ticket: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+    workflow = parse_workflow_snapshot(ticket.get('workflow_snapshot'))
+    ticket['workflow'] = workflow
+    ticket['can_approve_workflow'] = False
+    ticket['current_workflow_node'] = None
+    ticket['workflow_current_node_name'] = None
+    ticket['workflow_relation'] = None
+
+    if not workflow:
+        return ticket
+
+    if user_id in workflow_user_ids(workflow):
+        ticket['workflow_relation'] = 'participant'
+
+    current_index = workflow.get('current_index', 0)
+    nodes = workflow.get('nodes', [])
+    if 0 <= current_index < len(nodes):
+        current_node = nodes[current_index]
+        ticket['current_workflow_node'] = current_node
+        ticket['workflow_current_node_name'] = current_node.get('name')
+        approver_ids = normalize_id_list(current_node.get('approver_ids'))
+        cc_ids = normalize_id_list(current_node.get('cc_ids'))
+        if ticket.get('status') == 'pending_approval' and user_id in approver_ids:
+            ticket['can_approve_workflow'] = True
+            ticket['workflow_relation'] = 'current_approver'
+        elif user_id in cc_ids:
+            ticket['workflow_relation'] = ticket['workflow_relation'] or 'cc'
+
+    return ticket
+
+def can_user_see_ticket(ticket: Dict[str, Any], user_id: int) -> bool:
+    if ticket.get('submitter_id') == user_id or ticket.get('assigned_to') == user_id:
+        return True
+    workflow = parse_workflow_snapshot(ticket.get('workflow_snapshot'))
+    return user_id in workflow_user_ids(workflow)
+
+def summarize_workflow_nodes(nodes: List[Dict[str, Any]]) -> str:
+    node_lines = []
+    for node in nodes:
+        approver_names = "、".join([approver['real_name'] for approver in node.get("approvers", [])]) or "未配置"
+        cc_names = "、".join([cc_user['real_name'] for cc_user in node.get("cc_users", [])]) or "无"
+        comment = f"，说明：{node.get('comment')}" if node.get('comment') else ""
+        node_lines.append(f"{node.get('order')}. {node.get('name')}：审批人 {approver_names}，抄送 {cc_names}{comment}")
+    return "\n".join(node_lines)
+
+async def assign_ticket_after_workflow(cursor, ticket_id: int, ticket: Dict[str, Any], submitter_name: str):
+    cursor.execute("""
+        SELECT m.it_user_id, u.real_name as it_user_name
+        FROM category_it_mapping m
+        JOIN users u ON m.it_user_id = u.id
+        WHERE m.category_id = %s AND m.is_active = 1
+        ORDER BY m.priority DESC
+        LIMIT 1
+    """, (ticket['category_id'],))
+    assigned_it = cursor.fetchone()
+
+    if assigned_it:
+        cursor.execute("""
+            UPDATE tickets 
+            SET status = 'claimed', assigned_to = %s, claimed_at = NOW()
+            WHERE id = %s
+        """, (assigned_it['it_user_id'], ticket_id))
+        cursor.execute("""
+            INSERT INTO ticket_logs (ticket_id, user_id, user_name, action, content)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (ticket_id, assigned_it['it_user_id'], assigned_it['it_user_name'], '自动分配', 
+              f"审批通过后，系统自动分配给{assigned_it['it_user_name']}"))
+        cursor.execute("""
+            INSERT INTO notifications (user_id, ticket_id, title, content, type)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (assigned_it['it_user_id'], ticket_id, '新工单分配', 
+              f"{submitter_name}提交的工单：{ticket['title']} 已审批通过并分配给您", 'new_ticket'))
+        await manager.send_personal_message({
+            "type": "new_ticket_assigned",
+            "ticket_id": ticket_id,
+            "ticket_no": ticket['ticket_no'],
+            "title": ticket['title'],
+            "message": f"工单已审批通过并自动分配给您"
+        }, assigned_it['it_user_id'])
+        return assigned_it
+
+    cursor.execute("UPDATE tickets SET status = 'pending' WHERE id = %s", (ticket_id,))
+    cursor.execute("SELECT u.id FROM users u JOIN roles r ON u.role_id = r.id WHERE r.role_type = 'it'")
+    it_users = cursor.fetchall()
+    for it_user in it_users:
+        cursor.execute("""
+            INSERT INTO notifications (user_id, ticket_id, title, content, type)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (it_user['id'], ticket_id, '新工单提醒', f"{submitter_name}提交的工单：{ticket['title']} 已审批通过，请处理", 'new_ticket'))
+        await manager.send_personal_message({
+            "type": "new_ticket",
+            "ticket_id": ticket_id,
+            "ticket_no": ticket['ticket_no'],
+            "title": ticket['title'],
+            "message": "工单已审批通过，请处理"
+        }, it_user['id'])
+    return None
 
 # 根路径重定向
 @app.get("/")
@@ -1005,25 +1289,120 @@ async def get_categories(token: str, conn=Depends(get_db)):
     categories = cursor.fetchall()
     return {"categories": categories}
 
-@app.put("/api/categories/{category_id}")
-async def update_category(category_id: int, token: str, category: CategoryUpdate, conn=Depends(get_db)):
+@app.post("/api/categories")
+async def create_category(token: str, category: CategoryCreate, request: Request, conn=Depends(get_db)):
     payload = verify_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="无效的token")
     
+    user = require_admin(payload, conn)
+    category_name = category.category_name.strip()
+    if not category_name:
+        raise HTTPException(status_code=400, detail="工单类型名称不能为空")
+
     cursor = conn.cursor(pymysql.cursors.DictCursor)
+    cursor.execute("SELECT id FROM ticket_categories WHERE category_name = %s", (category_name,))
+    if cursor.fetchone():
+        raise HTTPException(status_code=400, detail="工单类型已存在")
+
+    workflow_template = validate_workflow_template(category.workflow_template, conn)
+    cursor.execute("""
+        INSERT INTO ticket_categories (category_name, form_template, workflow_template)
+        VALUES (%s, %s, %s)
+    """, (category_name, category.form_template, workflow_template))
+    category_id = cursor.lastrowid
+    log_operation(conn, user['id'], user['username'], user['real_name'], 'category', '创建工单类型', f"创建工单类型：{category_name}", request)
+    conn.commit()
+
+    return {"message": "工单类型创建成功", "category_id": category_id}
+
+@app.put("/api/categories/{category_id}")
+async def update_category(category_id: int, token: str, category: CategoryUpdate, request: Request, conn=Depends(get_db)):
+    payload = verify_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="无效的token")
     
-    # 检查权限
-    cursor.execute("SELECT u.*, r.role_type FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = %s", (payload['user_id'],))
-    user = cursor.fetchone()
-    
-    if user['role_type'] not in ['super_admin', 'admin']:
-        raise HTTPException(status_code=403, detail="没有权限修改分类配置")
-        
-    cursor.execute("UPDATE ticket_categories SET form_template = %s WHERE id = %s", (category.form_template, category_id))
+    user = require_admin(payload, conn)
+    cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+    cursor.execute("SELECT * FROM ticket_categories WHERE id = %s", (category_id,))
+    existing = cursor.fetchone()
+    if not existing:
+        raise HTTPException(status_code=404, detail="工单类型不存在")
+
+    updates = []
+    params = []
+    if category.category_name is not None:
+        category_name = category.category_name.strip()
+        if not category_name:
+            raise HTTPException(status_code=400, detail="工单类型名称不能为空")
+        cursor.execute("SELECT id FROM ticket_categories WHERE category_name = %s AND id <> %s", (category_name, category_id))
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail="工单类型已存在")
+        updates.append("category_name = %s")
+        params.append(category_name)
+
+    if category.form_template is not None:
+        updates.append("form_template = %s")
+        params.append(category.form_template)
+
+    if category.workflow_template is not None:
+        updates.append("workflow_template = %s")
+        params.append(validate_workflow_template(category.workflow_template, conn))
+
+    if not updates:
+        return {"message": "没有需要更新的内容"}
+
+    params.append(category_id)
+    cursor.execute(f"UPDATE ticket_categories SET {', '.join(updates)} WHERE id = %s", tuple(params))
+    log_operation(conn, user['id'], user['username'], user['real_name'], 'category', '更新工单类型', f"更新工单类型：{existing['category_name']}", request)
     conn.commit()
     
     return {"message": "分类配置更新成功"}
+
+@app.put("/api/categories/{category_id}/workflow")
+async def update_category_workflow(category_id: int, token: str, workflow: CategoryWorkflowUpdate, request: Request, conn=Depends(get_db)):
+    payload = verify_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="无效的token")
+    
+    user = require_admin(payload, conn)
+    workflow_template = validate_workflow_template(workflow.workflow_template, conn)
+    cursor = conn.cursor(pymysql.cursors.DictCursor)
+    cursor.execute("SELECT category_name FROM ticket_categories WHERE id = %s", (category_id,))
+    category = cursor.fetchone()
+    if not category:
+        raise HTTPException(status_code=404, detail="工单类型不存在")
+
+    cursor.execute("UPDATE ticket_categories SET workflow_template = %s WHERE id = %s", (workflow_template, category_id))
+    log_operation(conn, user['id'], user['username'], user['real_name'], 'workflow', '保存审批流程', f"保存“{category['category_name']}”审批流程", request)
+    conn.commit()
+
+    return {"message": "审批流程保存成功"}
+
+@app.delete("/api/categories/{category_id}")
+async def delete_category(category_id: int, token: str, request: Request, conn=Depends(get_db)):
+    payload = verify_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="无效的token")
+    
+    user = require_admin(payload, conn)
+    cursor = conn.cursor(pymysql.cursors.DictCursor)
+    cursor.execute("SELECT * FROM ticket_categories WHERE id = %s", (category_id,))
+    category = cursor.fetchone()
+    if not category:
+        raise HTTPException(status_code=404, detail="工单类型不存在")
+
+    cursor.execute("SELECT COUNT(*) AS total FROM tickets WHERE category_id = %s", (category_id,))
+    if cursor.fetchone()['total'] > 0:
+        raise HTTPException(status_code=400, detail="该工单类型已有工单使用，不能删除")
+
+    cursor.execute("DELETE FROM category_it_mapping WHERE category_id = %s", (category_id,))
+    cursor.execute("DELETE FROM ticket_categories WHERE id = %s", (category_id,))
+    log_operation(conn, user['id'], user['username'], user['real_name'], 'category', '删除工单类型', f"删除工单类型：{category['category_name']}", request)
+    conn.commit()
+
+    return {"message": "工单类型删除成功"}
 
 # 工单管理接口
 @app.get("/api/tickets")
@@ -1038,9 +1417,7 @@ async def get_tickets(token: str, status: Optional[str] = None, conn=Depends(get
     cursor.execute("SELECT u.*, r.role_type FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = %s", (payload['user_id'],))
     current_user = cursor.fetchone()
     
-    # 根据角色类型查询工单
-    if current_user['role_type'] in ['super_admin', 'admin', 'hr']:
-        # 管理员和HR可以看到所有工单
+    if current_user['role_type'] in ['super_admin', 'admin', 'hr', 'it']:
         if status:
             cursor.execute("""
                 SELECT t.*, c.category_name, 
@@ -1064,33 +1441,9 @@ async def get_tickets(token: str, status: Optional[str] = None, conn=Depends(get
                 LEFT JOIN users assignee ON t.assigned_to = assignee.id
                 ORDER BY t.created_at DESC
             """)
-    elif current_user['role_type'] == 'it':
-        # IT人员可以看到所有工单和自己负责的工单
-        if status:
-            cursor.execute("""
-                SELECT t.*, c.category_name, 
-                       submitter.real_name as submitter_real_name,
-                       assignee.real_name as assignee_name
-                FROM tickets t
-                JOIN ticket_categories c ON t.category_id = c.id
-                JOIN users submitter ON t.submitter_id = submitter.id
-                LEFT JOIN users assignee ON t.assigned_to = assignee.id
-                WHERE t.status = %s
-                ORDER BY t.created_at DESC
-            """, (status,))
-        else:
-            cursor.execute("""
-                SELECT t.*, c.category_name, 
-                       submitter.real_name as submitter_real_name,
-                       assignee.real_name as assignee_name
-                FROM tickets t
-                JOIN ticket_categories c ON t.category_id = c.id
-                JOIN users submitter ON t.submitter_id = submitter.id
-                LEFT JOIN users assignee ON t.assigned_to = assignee.id
-                ORDER BY t.created_at DESC
-            """)
+        tickets = cursor.fetchall()
     else:
-        # 普通用户只能看到自己提交的工单
+        # 普通用户可以看到自己提交的工单，以及自己参与审批/抄送的工单。
         if status:
             cursor.execute("""
                 SELECT t.*, c.category_name, 
@@ -1100,7 +1453,7 @@ async def get_tickets(token: str, status: Optional[str] = None, conn=Depends(get
                 JOIN ticket_categories c ON t.category_id = c.id
                 JOIN users submitter ON t.submitter_id = submitter.id
                 LEFT JOIN users assignee ON t.assigned_to = assignee.id
-                WHERE t.submitter_id = %s AND t.status = %s
+                WHERE (t.submitter_id = %s OR t.workflow_snapshot IS NOT NULL) AND t.status = %s
                 ORDER BY t.created_at DESC
             """, (payload['user_id'], status))
         else:
@@ -1112,11 +1465,12 @@ async def get_tickets(token: str, status: Optional[str] = None, conn=Depends(get
                 JOIN ticket_categories c ON t.category_id = c.id
                 JOIN users submitter ON t.submitter_id = submitter.id
                 LEFT JOIN users assignee ON t.assigned_to = assignee.id
-                WHERE t.submitter_id = %s
+                WHERE t.submitter_id = %s OR t.workflow_snapshot IS NOT NULL
                 ORDER BY t.created_at DESC
             """, (payload['user_id'],))
+        tickets = [ticket for ticket in cursor.fetchall() if can_user_see_ticket(ticket, payload['user_id'])]
     
-    tickets = cursor.fetchall()
+    tickets = [apply_ticket_workflow_fields(ticket, payload['user_id']) for ticket in tickets]
     return {"tickets": tickets}
 
 @app.post("/api/tickets")
@@ -1130,6 +1484,15 @@ async def create_ticket(token: str, ticket: TicketCreate, request: Request, conn
     # 获取用户信息
     cursor.execute("SELECT * FROM users WHERE id = %s", (payload['user_id'],))
     user = cursor.fetchone()
+
+    cursor.execute("SELECT category_name, workflow_template FROM ticket_categories WHERE id = %s", (ticket.category_id,))
+    category = cursor.fetchone()
+    if not category:
+        raise HTTPException(status_code=400, detail="工单分类不存在")
+
+    workflow_info = load_workflow_people(cursor, category.get('workflow_template'))
+    workflow_snapshot = build_workflow_snapshot(workflow_info["nodes"])
+    initial_status = "pending_approval" if workflow_snapshot else "pending"
     
     # 生成工单编号
     ticket_no = generate_ticket_no(cursor)
@@ -1137,10 +1500,10 @@ async def create_ticket(token: str, ticket: TicketCreate, request: Request, conn
     # 创建工单
     cursor.execute("""
         INSERT INTO tickets (ticket_no, title, category_id, description, equipment_type, location, 
-                           submitter_id, submitter_name, priority, extra_data)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                           submitter_id, submitter_name, priority, extra_data, workflow_snapshot, status)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """, (ticket_no, ticket.title, ticket.category_id, ticket.description, ticket.equipment_type, 
-          ticket.location, payload['user_id'], user['real_name'], ticket.priority, ticket.extra_data))
+          ticket.location, payload['user_id'], user['real_name'], ticket.priority, ticket.extra_data, workflow_snapshot, initial_status))
     
     ticket_id = cursor.lastrowid
     
@@ -1149,7 +1512,51 @@ async def create_ticket(token: str, ticket: TicketCreate, request: Request, conn
         INSERT INTO ticket_logs (ticket_id, user_id, user_name, action, content)
         VALUES (%s, %s, %s, %s, %s)
     """, (ticket_id, payload['user_id'], user['real_name'], '创建工单', f"创建了工单：{ticket.title}"))
-    
+
+    if workflow_info["nodes"]:
+        cursor.execute("""
+            INSERT INTO ticket_logs (ticket_id, user_id, user_name, action, content)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (ticket_id, payload['user_id'], '系统', '发起审批', "已发起审批流程：\n" + summarize_workflow_nodes(workflow_info["nodes"])))
+
+        workflow_data = parse_workflow_snapshot(workflow_snapshot)
+        first_node = workflow_data["nodes"][0] if workflow_data and workflow_data["nodes"] else None
+        first_approver_ids = normalize_id_list(first_node.get("approver_ids")) if first_node else []
+        first_cc_ids = normalize_id_list(first_node.get("cc_ids")) if first_node else []
+        for notify_user_id in first_approver_ids + first_cc_ids:
+            if notify_user_id == payload['user_id']:
+                continue
+            notice_title = '待审批工单' if notify_user_id in first_approver_ids else '工单抄送'
+            notice_content = f"{user['real_name']}提交了“{category['category_name']}”工单：{ticket.title}"
+            if notify_user_id in first_approver_ids:
+                notice_content += "，请您审批"
+            else:
+                notice_content += "，抄送给您"
+            cursor.execute("""
+                INSERT INTO notifications (user_id, ticket_id, title, content, type)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (notify_user_id, ticket_id, notice_title, notice_content, 'workflow_notice'))
+            await manager.send_personal_message({
+                "type": "workflow_notice",
+                "ticket_id": ticket_id,
+                "ticket_no": ticket_no,
+                "title": ticket.title,
+                "message": notice_content
+            }, notify_user_id)
+
+        conn.commit()
+        webhook_title, webhook_content = get_webhook_message('ticket_created', {
+            "ticket_no": ticket_no,
+            "title": ticket.title,
+            "submitter": user['real_name'],
+            "priority": ticket.priority,
+            "time": now_text(conn)
+        }, conn)
+        await send_webhook_notification('ticket_created', webhook_title, webhook_content, [payload['user_id']] + first_approver_ids + first_cc_ids, conn)
+        log_operation(conn, user['id'], user['username'], user['real_name'], 'ticket', '创建工单', f"创建工单 {ticket_no}：{ticket.title}，进入审批", request)
+        conn.commit()
+        return {"message": "工单创建成功，已进入审批流程", "ticket_id": ticket_id, "ticket_no": ticket_no}
+
     # 根据工单分类查找对应的IT人员
     cursor.execute("""
         SELECT m.it_user_id, u.real_name as it_user_name
@@ -1268,8 +1675,171 @@ async def get_ticket_detail(ticket_id: int, token: str, conn=Depends(get_db)):
     logs = cursor.fetchall()
     
     ticket['logs'] = logs
+    workflow = parse_workflow_snapshot(ticket.get('workflow_snapshot'))
+    ticket['workflow'] = workflow
+    ticket['can_approve_workflow'] = False
+    ticket['current_workflow_node'] = None
+    if workflow and ticket.get('status') == 'pending_approval':
+        current_index = workflow.get('current_index', 0)
+        if 0 <= current_index < len(workflow.get('nodes', [])):
+            current_node = workflow['nodes'][current_index]
+            ticket['current_workflow_node'] = current_node
+            ticket['can_approve_workflow'] = payload['user_id'] in normalize_id_list(current_node.get('approver_ids'))
     
     return {"ticket": ticket}
+
+@app.delete("/api/tickets/{ticket_id}")
+async def delete_ticket(ticket_id: int, token: str, request: Request, conn=Depends(get_db)):
+    payload = verify_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="无效的token")
+
+    cursor = conn.cursor(pymysql.cursors.DictCursor)
+    cursor.execute("""
+        SELECT t.*, c.category_name, u.username, u.real_name, r.role_type
+        FROM tickets t
+        JOIN ticket_categories c ON t.category_id = c.id
+        JOIN users u ON u.id = %s
+        JOIN roles r ON u.role_id = r.id
+        WHERE t.id = %s
+    """, (payload['user_id'], ticket_id))
+    row = cursor.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="工单不存在")
+
+    role_type = row['role_type']
+    can_delete = role_type in ['super_admin', 'admin']
+    if role_type == 'it':
+        can_delete = can_user_see_ticket(row, payload['user_id'])
+
+    if not can_delete:
+        raise HTTPException(status_code=403, detail="您没有权限删除该工单")
+
+    ticket_no = row['ticket_no']
+    title = row['title']
+    cursor.execute("DELETE FROM ticket_logs WHERE ticket_id = %s", (ticket_id,))
+    cursor.execute("DELETE FROM notifications WHERE ticket_id = %s", (ticket_id,))
+    cursor.execute("DELETE FROM tickets WHERE id = %s", (ticket_id,))
+    log_operation(conn, payload['user_id'], row['username'], row['real_name'], 'ticket', '删除工单', f"删除工单 {ticket_no}：{title}", request)
+    conn.commit()
+
+    return {"message": "工单已删除"}
+
+@app.put("/api/tickets/{ticket_id}/workflow")
+async def approve_ticket_workflow(ticket_id: int, token: str, action: WorkflowAction, request: Request, conn=Depends(get_db)):
+    payload = verify_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="无效的token")
+
+    action_name = (action.action or "").strip().lower()
+    if action_name not in ["approve", "reject"]:
+        raise HTTPException(status_code=400, detail="审批操作只能是通过或驳回")
+
+    cursor = conn.cursor(pymysql.cursors.DictCursor)
+    cursor.execute("""
+        SELECT t.*, submitter.real_name as submitter_real_name
+        FROM tickets t
+        JOIN users submitter ON t.submitter_id = submitter.id
+        WHERE t.id = %s
+    """, (ticket_id,))
+    ticket = cursor.fetchone()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="工单不存在")
+    if ticket['status'] != 'pending_approval':
+        raise HTTPException(status_code=400, detail="该工单当前不在审批中")
+
+    workflow = parse_workflow_snapshot(ticket.get('workflow_snapshot'))
+    if not workflow:
+        raise HTTPException(status_code=400, detail="该工单没有审批流程")
+
+    current_index = workflow.get('current_index', 0)
+    nodes = workflow.get('nodes', [])
+    if current_index < 0 or current_index >= len(nodes):
+        raise HTTPException(status_code=400, detail="审批流程状态异常")
+
+    current_node = nodes[current_index]
+    if payload['user_id'] not in normalize_id_list(current_node.get('approver_ids')):
+        raise HTTPException(status_code=403, detail="您不是当前节点审批人")
+
+    cursor.execute("SELECT * FROM users WHERE id = %s", (payload['user_id'],))
+    user = cursor.fetchone()
+    comment = (action.comment or "").strip()
+    action_text = "通过" if action_name == "approve" else "驳回"
+
+    current_node["status"] = "approved" if action_name == "approve" else "rejected"
+    current_node["approved_by"] = payload['user_id']
+    current_node["approved_by_name"] = user['real_name']
+    current_node["approved_at"] = now_text(conn)
+    current_node["approval_comment"] = comment
+
+    cursor.execute("""
+        INSERT INTO ticket_logs (ticket_id, user_id, user_name, action, content)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (ticket_id, payload['user_id'], user['real_name'], f"审批{action_text}", f"{user['real_name']}在“{current_node.get('name')}”节点{action_text}了工单" + (f"，意见：{comment}" if comment else "")))
+
+    if action_name == "reject":
+        workflow["status"] = "rejected"
+        workflow["current_index"] = current_index
+        cursor.execute("""
+            UPDATE tickets SET status = 'rejected', workflow_snapshot = %s WHERE id = %s
+        """, (json.dumps(workflow, ensure_ascii=False), ticket_id))
+        cursor.execute("""
+            INSERT INTO notifications (user_id, ticket_id, title, content, type)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (ticket['submitter_id'], ticket_id, '工单审批被驳回', f"您的工单：{ticket['title']} 在“{current_node.get('name')}”节点被驳回", 'workflow_rejected'))
+        await manager.send_personal_message({
+            "type": "workflow_rejected",
+            "ticket_id": ticket_id,
+            "ticket_no": ticket['ticket_no'],
+            "title": ticket['title'],
+            "message": f"您的工单在“{current_node.get('name')}”节点被驳回"
+        }, ticket['submitter_id'])
+        log_operation(conn, user['id'], user['username'], user['real_name'], 'workflow', '驳回工单', f"驳回工单 {ticket['ticket_no']}：{ticket['title']}", request)
+        conn.commit()
+        return {"message": "已驳回"}
+
+    next_index = current_index + 1
+    if next_index < len(nodes):
+        nodes[next_index]["status"] = "pending"
+        workflow["current_index"] = next_index
+        workflow["status"] = "pending"
+        next_node = nodes[next_index]
+        cursor.execute("UPDATE tickets SET workflow_snapshot = %s WHERE id = %s", (json.dumps(workflow, ensure_ascii=False), ticket_id))
+        for approver_id in normalize_id_list(next_node.get("approver_ids")):
+            cursor.execute("""
+                INSERT INTO notifications (user_id, ticket_id, title, content, type)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (approver_id, ticket_id, '待审批工单', f"工单：{ticket['title']} 已流转到“{next_node.get('name')}”节点，请您审批", 'workflow_notice'))
+            await manager.send_personal_message({
+                "type": "workflow_notice",
+                "ticket_id": ticket_id,
+                "ticket_no": ticket['ticket_no'],
+                "title": ticket['title'],
+                "message": f"工单已流转到“{next_node.get('name')}”节点，请您审批"
+            }, approver_id)
+        log_operation(conn, user['id'], user['username'], user['real_name'], 'workflow', '审批通过', f"审批通过工单 {ticket['ticket_no']}：{ticket['title']}", request)
+        conn.commit()
+        return {"message": "审批通过，已流转到下一节点"}
+
+    workflow["status"] = "approved"
+    workflow["current_index"] = current_index
+    cursor.execute("UPDATE tickets SET workflow_snapshot = %s WHERE id = %s", (json.dumps(workflow, ensure_ascii=False), ticket_id))
+    assigned_it = await assign_ticket_after_workflow(cursor, ticket_id, ticket, ticket['submitter_real_name'])
+    cursor.execute("""
+        INSERT INTO notifications (user_id, ticket_id, title, content, type)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (ticket['submitter_id'], ticket_id, '工单审批通过', f"您的工单：{ticket['title']} 已全部审批通过", 'workflow_approved'))
+    await manager.send_personal_message({
+        "type": "workflow_approved",
+        "ticket_id": ticket_id,
+        "ticket_no": ticket['ticket_no'],
+        "title": ticket['title'],
+        "message": "您的工单已全部审批通过"
+    }, ticket['submitter_id'])
+    log_operation(conn, user['id'], user['username'], user['real_name'], 'workflow', '审批完成', f"审批完成工单 {ticket['ticket_no']}：{ticket['title']}", request)
+    conn.commit()
+    return {"message": "审批通过，流程已完成", "assigned_to": assigned_it['it_user_id'] if assigned_it else None}
 
 @app.put("/api/tickets/{ticket_id}/claim")
 async def claim_ticket(ticket_id: int, token: str, request: Request, conn=Depends(get_db)):
@@ -2281,7 +2851,7 @@ async def get_statistics(token: str, conn=Depends(get_db)):
         stats['total_tickets'] = cursor.fetchone()['total']
         
         # 待处理工单数
-        cursor.execute("SELECT COUNT(*) as pending FROM tickets WHERE status = 'pending'")
+        cursor.execute("SELECT COUNT(*) as pending FROM tickets WHERE status IN ('pending', 'pending_approval')")
         stats['pending_tickets'] = cursor.fetchone()['pending']
         
         # 处理中工单数
@@ -2336,7 +2906,7 @@ async def get_statistics(token: str, conn=Depends(get_db)):
         stats['my_tickets'] = cursor.fetchone()['total']
         
         # 待处理
-        cursor.execute("SELECT COUNT(*) as pending FROM tickets WHERE submitter_id = %s AND status = 'pending'", (payload['user_id'],))
+        cursor.execute("SELECT COUNT(*) as pending FROM tickets WHERE submitter_id = %s AND status IN ('pending', 'pending_approval')", (payload['user_id'],))
         stats['pending_tickets'] = cursor.fetchone()['pending']
         
         # 处理中
