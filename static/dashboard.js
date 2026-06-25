@@ -1710,7 +1710,7 @@ function printCurrentTicket() {
     }
 
     const user = currentUser || {};
-    const watermarkText = `账号: ${user.username || '未知账号'} | 姓名: ${user.real_name || '未知姓名'} | 邮箱: ${user.email || '未填写邮箱'} | 打印时间: ${formatDateTime(new Date().toISOString())}`;
+    const watermarkText = `账号: ${user.username || '未知账号'} | 姓名: ${user.real_name || '未知姓名'} | 打印时间: ${formatDateTime(new Date().toISOString())}`;
     const watermarks = Array(42).fill(`<span>${escapePrintText(watermarkText)}</span>`).join('');
 
     printWindow.document.write(`<!DOCTYPE html>
